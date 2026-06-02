@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>通知設定</title>
+</head>
+<body>
+  <h1>通知設定</h1>
+
+  <form>
+    <h2>通知の頻度</h2>
+    <label>
+      <input type="radio" name="frequency" value="high"> 高い
+    </label>
+    <label>
+      <input type="radio" name="frequency" value="medium" checked> 中
+    </label>
+    <label>
+      <input type="radio" name="frequency" value="low"> 低い
+    </label>
+
+    <h2>通知時間帯</h2>
+    <label>
+      開始時刻: <input type="time" name="start-time" value="09:00">
+    </label>
+    <label>
+      終了時刻: <input type="time" name="end-time" value="21:00">
+    </label>
+
+    <h2>通知タイプ</h2>
+    <label>
+      <input type="checkbox" name="notification-type" value="line" checked> LINE
+    </label>
+    <label>
+      <input type="checkbox" name="notification-type" value="browser"> ブラウザ通知
+    </label>
+    <label>
+      <input type="checkbox" name="notification-type" value="sound"> 音声通知
+    </label>
+
+    <h2>その他</h2>
+    <label>
+      <input type="checkbox" name="enable-notification" value="enabled" checked> 通知を有効にする
+    </label>
+
+    <div style="margin-top: 20px;">
+      <button type="submit">保存</button>
+      <button type="button" onclick="history.back()">戻る</button>
+    </div>
+  </form>
+</body>
+</html>
