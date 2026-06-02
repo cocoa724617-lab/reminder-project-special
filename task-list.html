@@ -9,34 +9,50 @@
   <h1>タスク一覧</h1>
 
   <section id="task-list-screen">
-    <div class="task-card">
-      <h3>今日までの課題を確認する</h3>
-      <p>カテゴリ：課題</p>
-      <p>優先度：高</p>
-      <p>状態：未完了</p>
-      <button>完了</button>
-      <button>後でやる</button>
-    </div>
+    <div id="task-list"></div>
 
-    <div class="task-card">
-      <h3>LINEの返信をする</h3>
-      <p>カテゴリ：返信</p>
-      <p>優先度：中</p>
-      <p>状態：未完了</p>
-      <button>完了</button>
-      <button>後でやる</button>
-    </div>
-
-    <div class="task-card">
-      <h3>明日の授業の持ち物を確認する</h3>
-      <p>カテゴリ：持ち物</p>
-      <p>優先度：中</p>
-      <p>状態：未完了</p>
-      <button>完了</button>
-      <button>後でやる</button>
-    </div>
-
+    <a href="task-register.html" class="button-link">タスクを追加する</a>
     <a href="index.html" class="button-link">ホームに戻る</a>
   </section>
+
+  <script>
+    const taskList = document.getElementById("task-list");
+
+    const tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+
+    if (tasks.length === 0) {
+      taskList.innerHTML = "<p>登録されたタスクはありません。</p>";
+    } else {
+      tasks.forEach(function(task, index) {
+        const taskCard = document.createElement("div");
+        taskCard.className = "task-card";
+
+        taskCard.innerHTML = `
+          <h3>${task.title}</h3>
+          <p>期限：${task.date || "未設定"}</p>
+          <p>カテゴリ：${task.category}</p>
+          <p>優先度：${task.priority}</p>
+          <p>状態：${task.status}</p>
+          <p>メモ：${task.memo || "なし"}</p>
+          <button onclick="completeTask(${index})">完了</button>
+          <button onclick="delayTask(${index})">後でやる</button>
+        `;
+
+        taskList.appendChild(taskCard);
+      });
+    }
+
+    function completeTask(index) {
+      tasks[index].status = "完了";
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+      location.reload();
+    }
+
+    function delayTask(index) {
+      tasks[index].status = "後でやる";
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+      location.reload();
+    }
+  </script>
 </body>
 </html>

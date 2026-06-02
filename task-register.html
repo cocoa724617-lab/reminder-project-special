@@ -7,12 +7,27 @@
 <body>
   <h1>タスク登録</h1>
 
-  <form>
+  <form id="task-form">
     <label for="task-title">タスク名</label><br>
-    <input type="text" id="task-title" name="task-title" placeholder="例：レポートを書く"><br><br>
+    <input type="text" id="task-title" name="task-title" placeholder="例：レポートを書く" required><br><br>
 
     <label for="task-date">期限</label><br>
     <input type="date" id="task-date" name="task-date"><br><br>
+
+    <label for="task-category">カテゴリ</label><br>
+    <select id="task-category" name="task-category">
+      <option value="課題">課題</option>
+      <option value="返信">返信</option>
+      <option value="持ち物">持ち物</option>
+      <option value="その他">その他</option>
+    </select><br><br>
+
+    <label for="task-priority">優先度</label><br>
+    <select id="task-priority" name="task-priority">
+      <option value="高">高</option>
+      <option value="中" selected>中</option>
+      <option value="低">低</option>
+    </select><br><br>
 
     <label for="task-memo">メモ</label><br>
     <textarea id="task-memo" name="task-memo" placeholder="メモを入力"></textarea><br><br>
@@ -23,5 +38,38 @@
   <br>
 
   <button onclick="location.href='index.html'">トップに戻る</button>
+
+  <script>
+    const taskForm = document.getElementById("task-form");
+
+    taskForm.addEventListener("submit", function(event) {
+      event.preventDefault();
+
+      const title = document.getElementById("task-title").value;
+      const date = document.getElementById("task-date").value;
+      const category = document.getElementById("task-category").value;
+      const priority = document.getElementById("task-priority").value;
+      const memo = document.getElementById("task-memo").value;
+
+      const newTask = {
+        title: title,
+        date: date,
+        category: category,
+        priority: priority,
+        memo: memo,
+        status: "未完了"
+      };
+
+      const tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+
+      tasks.push(newTask);
+
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+
+      alert("タスクを登録しました");
+
+      location.href = "task-list.html";
+    });
+  </script>
 </body>
 </html>
