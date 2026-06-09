@@ -11,48 +11,90 @@
   <section id="task-list-screen">
     <div id="task-list"></div>
 
-    <a href="task-register.html" class="button-link">タスクを追加する</a>
+    <a href="task-form.html" class="button-link">タスクを追加する</a>
     <a href="index.html" class="button-link">ホームに戻る</a>
+    <a href="task-temp.html" class="button-link">一時保存を見る</a>
   </section>
 
   <script>
-    const taskList = document.getElementById("task-list");
+    function loadTasks() { return JSON.parse(localStorage.getItem('tasks') || '[]'); }
+    function saveTasks(tasks) { localStorage.setItem('tasks', JSON.stringify(tasks)); }
 
-    const tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+    function loadTemp() { return JSON.parse(localStorage.getItem('tasks_temp') || '[]'); }
+    function saveTemp(temp) { localStorage.setItem('tasks_temp', JSON.stringify(temp)); }
 
-    if (tasks.length === 0) {
-      taskList.innerHTML = "<p>登録されたタスクはありません。</p>";
-    } else {
+    const taskList = document.getElementById('task-list');
+
+    function render() {
+      const tasks = loadTasks();
+      taskList.innerHTML = '';
+
+      if (tasks.length === 0) {
+        taskList.innerHTML = '<p>登録されたタスクはありません。</p>';
+        return;
+      }
+
       tasks.forEach(function(task, index) {
-        const taskCard = document.createElement("div");
-        taskCard.className = "task-card";
+        const taskCard = document.createElement('div');
+        taskCard.className = 'task-card';
 
         taskCard.innerHTML = `
-          <h3>${task.title}</h3>
-          <p>期限：${task.date || "未設定"}</p>
-          <p>カテゴリ：${task.category}</p>
-          <p>優先度：${task.priority}</p>
-          <p>状態：${task.status}</p>
-          <p>メモ：${task.memo || "なし"}</p>
-          <button onclick="completeTask(${index})">完了</button>
-          <button onclick="delayTask(${index})">後でやる</button>
+          <h3>${task.title || task.name || '(無題)'}</h3>
+          <p>期限：${task.date || task.dueDate || '未設定'}</p>
+          <p>カテゴリ：${task.category || '-'}</p>
+          <p>優先度：${task.priority || '-'}</p>
+          <p>状態：${task.status || (task.enabled ? '有効' : '無効')}</p>
+          <p>メモ：${task.memo || task.description || 'なし'}</p>
+          <button id="complete-${index}">完了</button>
+          <button id="delay-${index}">後でやる</button>
+          <button id="edit-${index}">編集</button>
         `;
 
         taskList.appendChild(taskCard);
+
+        document.getElementById(`complete-${index}`).addEventListener('click', () => completeTask(index));
+        document.getElementById(`delay-${index}`).addEventListener('click', () => delayTask(index));
+        document.getElementById(`edit-${index}`).addEventListener('click', () => editTask(index));
       });
     }
 
     function completeTask(index) {
-      tasks[index].status = "完了";
-      localStorage.setItem("tasks", JSON.stringify(tasks));
-      location.reload();
+      if (!confirm('このタスクを完了（削除）しますか？ 一時保存に移動します。')) return;
+      const tasks = loadTasks();
+      const removed = tasks.splice(index, 1)[0];
+      saveTasks(tasks);
+
+      // 一時保存に移動
+      const temp = loadTemp();
+      removed.deletedAt = new Date().toISOString();
+      temp.push(removed);
+      saveTemp(temp);
+
+      render();
     }
 
     function delayTask(index) {
-      tasks[index].status = "後でやる";
-      localStorage.setItem("tasks", JSON.stringify(tasks));
-      location.reload();
+      const tasks = loadTasks();
+      tasks[index].status = '後でやる';
+      saveTasks(tasks);
+      render();
     }
+
+    function editTask(index) {
+      const tasks = loadTasks();
+      const task = tasks[index];
+      // タスクの id がなければ生成して保存 so edit via index -> open form without id might not edit
+      if (task.id) {
+        location.href = `task-form.html?id=${task.id}`;
+      } else {
+        // fallback: save tasks with generated ids and go to the edit page
+        tasks.forEach((t, i) => { if (!t.id) t.id = Date.now().toString() + '_' + i; });
+        saveTasks(tasks);
+        location.href = `task-form.html?id=${tasks[index].id}`;
+      }
+    }
+
+    render();
   </script>
 </body>
 </html>
