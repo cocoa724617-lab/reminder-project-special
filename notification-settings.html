@@ -3,6 +3,43 @@
 <head>
   <meta charset="UTF-8">
   <title>通知設定</title>
+  <style>
+    .exclude-time-item {
+      margin: 10px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .exclude-time-item input {
+      flex: 1;
+    }
+    .exclude-time-item button {
+      padding: 5px 10px;
+      background-color: #ff6b6b;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .exclude-time-item button:hover {
+      background-color: #ff5252;
+    }
+    .add-button {
+      padding: 8px 15px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .add-button:hover {
+      background-color: #45a049;
+    }
+  </style>
 </head>
 <body>
   <h1>通知設定</h1>
@@ -19,13 +56,25 @@
       <input type="radio" name="frequency" value="large"> 大（7～9）
     </label>
 
-    <h2>通知時間帯</h2>
+    <h2>① 通知をランダムに実行していい時間帯（起きている時間）</h2>
     <label>
       開始時刻: <input type="time" name="start-time" value="09:00">
     </label>
+    <br>
     <label>
       終了時刻: <input type="time" name="end-time" value="21:00">
     </label>
+
+    <h2>② 通知を辞めてほしい時間を個別に設定する時間</h2>
+    <div id="exclude-times-container">
+      <div class="exclude-time-item">
+        <input type="time" name="exclude-start" placeholder="開始時刻">
+        <span>～</span>
+        <input type="time" name="exclude-end" placeholder="終了時刻">
+        <button type="button" onclick="removeExcludeTime(this)">削除</button>
+      </div>
+    </div>
+    <button type="button" class="add-button" onclick="addExcludeTime()">+ 時間帯を追加</button>
 
     <h2>通知タイプ</h2>
     <label>
@@ -48,5 +97,24 @@
       <button type="button" onclick="history.back()">戻る</button>
     </div>
   </form>
+
+  <script>
+    function addExcludeTime() {
+      const container = document.getElementById('exclude-times-container');
+      const newItem = document.createElement('div');
+      newItem.className = 'exclude-time-item';
+      newItem.innerHTML = `
+        <input type="time" name="exclude-start" placeholder="開始時刻">
+        <span>～</span>
+        <input type="time" name="exclude-end" placeholder="終了時刻">
+        <button type="button" onclick="removeExcludeTime(this)">削除</button>
+      `;
+      container.appendChild(newItem);
+    }
+
+    function removeExcludeTime(button) {
+      button.parentElement.remove();
+    }
+  </script>
 </body>
 </html>
