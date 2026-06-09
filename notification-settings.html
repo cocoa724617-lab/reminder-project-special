@@ -45,16 +45,7 @@
   <h1>通知設定</h1>
 
   <form>
-    <h2>通知の頻度</h2>
-    <label>
-      <input type="radio" name="frequency" value="small"> 小（1～3）
-    </label>
-    <label>
-      <input type="radio" name="frequency" value="medium" checked> 中（4～6）
-    </label>
-    <label>
-      <input type="radio" name="frequency" value="large"> 大（7～9）
-    </label>
+    <!-- 通知の頻度はタスクごとに設定するため、この画面では削除しました -->
 
     <h2>① 通知をランダムに実行していい時間帯（起きている時間）</h2>
     <label>
@@ -76,7 +67,8 @@
     </div>
     <button type="button" class="add-button" onclick="addExcludeTime()">+ 時間帯を追加</button>
 
-    <h2>通知タイプ</h2>
+    <h2>通知タイプ（デフォルト）</h2>
+    <p>ここで設定した通知タイプはタスク側で個別に上書きできます。</p>
     <label>
       <input type="checkbox" name="notification-type" value="line" checked> LINE
     </label>
