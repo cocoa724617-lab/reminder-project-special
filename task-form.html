@@ -53,23 +53,18 @@
 
     <div class="actions">
       <button type="submit">保存</button>
-      <button type="button" onclick="location.href='index.html'">キャンセル</button>
+      <button type="button" onclick="location.href='task-list.html'">キャンセル</button>
     </div>
   </form>
 
   <script>
-    // シンプルな localStorage ベースの保存機能（デモ用）
+    // シンプルな localStorage ベースの保存機能（キー: 'tasks' に統一）
     const form = document.getElementById('task-form');
     const params = new URLSearchParams(location.search);
     const editId = params.get('id');
 
-    function loadTasks() {
-      return JSON.parse(localStorage.getItem('reminder_tasks') || '[]');
-    }
-
-    function saveTasks(tasks) {
-      localStorage.setItem('reminder_tasks', JSON.stringify(tasks));
-    }
+    function loadTasks() { return JSON.parse(localStorage.getItem('tasks') || '[]'); }
+    function saveTasks(tasks) { localStorage.setItem('tasks', JSON.stringify(tasks)); }
 
     function populateForm(task) {
       document.getElementById('task-name').value = task.name || '';
@@ -100,7 +95,7 @@
         name: formData.get('name'),
         description: formData.get('description'),
         time: formData.get('time'),
-        enabled: formData.get('enabled') === 'on' || document.getElementById('task-enable').checked,
+        enabled: document.getElementById('task-enable').checked,
         frequency: formData.get('frequency') || 'medium',
         notificationTypes: formData.getAll('notification-type')
       };
@@ -114,7 +109,7 @@
       }
       saveTasks(tasks);
       alert('保存しました');
-      location.href = 'index.html';
+      location.href = 'task-list.html';
     });
   </script>
 </body>
