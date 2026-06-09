@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>タスク登録 / 編集</title>
+  <style>
+    .form-group { margin: 10px 0; }
+    label { display: block; margin-bottom: 5px; }
+    input[type="text"], textarea, input[type="time"] { width: 100%; padding: 6px; box-sizing: border-box; }
+    .radios { display: flex; gap: 10px; align-items: center; }
+    .actions { margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <h1>タスクを登録 / 編集</h1>
+
+  <form id="task-form">
+    <div class="form-group">
+      <label for="task-name">タスク名</label>
+      <input id="task-name" name="name" type="text" required>
+    </div>
+
+    <div class="form-group">
+      <label for="task-desc">説明（任意）</label>
+      <textarea id="task-desc" name="description" rows="3"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="task-time">通知時刻（任意）</label>
+      <input id="task-time" name="time" type="time">
+    </div>
+
+    <div class="form-group">
+      <label>このタスクの通知を有効にする</label>
+      <input id="task-enable" name="enabled" type="checkbox" checked>
+    </div>
+
+    <div class="form-group">
+      <label>通知の頻度（タスク単位）</label>
+      <div class="radios">
+        <label><input type="radio" name="frequency" value="small"> 小（1〜3）</label>
+        <label><input type="radio" name="frequency" value="medium" checked> 中（4〜6）</label>
+        <label><input type="radio" name="frequency" value="large"> 大（7〜9）</label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>通知タイプ（タスクの個別設定）</label>
+      <label><input type="checkbox" name="notification-type" value="line" checked> LINE</label>
+      <label><input type="checkbox" name="notification-type" value="browser"> ブラウザ通知</label>
+      <label><input type="checkbox" name="notification-type" value="sound"> 音声通知</label>
+    </div>
+
+    <div class="actions">
+      <button type="submit">保存</button>
+      <button type="button" onclick="location.href='index.html'">キャンセル</button>
+    </div>
+  </form>
+
+  <script>
+    // シンプルな localStorage ベースの保存機能（デモ用）
+    const form = document.getElementById('task-form');
+    const params = new URLSearchParams(location.search);
+    const editId = params.get('id');
+
+    function loadTasks() {
+      return JSON.parse(localStorage.getItem('reminder_tasks') || '[]');
+    }
+
+    function saveTasks(tasks) {
+      localStorage.setItem('reminder_tasks', JSON.stringify(tasks));
+    }
+
+    function populateForm(task) {
+      document.getElementById('task-name').value = task.name || '';
+      document.getElementById('task-desc').value = task.description || '';
+      document.getElementById('task-time').value = task.time || '';
+      document.getElementById('task-enable').checked = !!task.enabled;
+      const freq = task.frequency || 'medium';
+      const freqInput = document.querySelector(`input[name="frequency"][value="${freq}"]`);
+      if (freqInput) freqInput.checked = true;
+      const types = task.notificationTypes || [];
+      document.querySelectorAll('input[name="notification-type"]').forEach(cb => {
+        cb.checked = types.includes(cb.value);
+      });
+    }
+
+    if (editId) {
+      const tasks = loadTasks();
+      const task = tasks.find(t => t.id === editId);
+      if (task) populateForm(task);
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const tasks = loadTasks();
+      const formData = new FormData(form);
+      const taskObj = {
+        id: editId || Date.now().toString(),
+        name: formData.get('name'),
+        description: formData.get('description'),
+        time: formData.get('time'),
+        enabled: formData.get('enabled') === 'on' || document.getElementById('task-enable').checked,
+        frequency: formData.get('frequency') || 'medium',
+        notificationTypes: formData.getAll('notification-type')
+      };
+
+      if (editId) {
+        const idx = tasks.findIndex(t => t.id === editId);
+        if (idx !== -1) tasks[idx] = taskObj;
+        else tasks.push(taskObj);
+      } else {
+        tasks.push(taskObj);
+      }
+      saveTasks(tasks);
+      alert('保存しました');
+      location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>
