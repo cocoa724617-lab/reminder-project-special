@@ -5,20 +5,41 @@
   <title>ランダム通知リマインダー</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body class="home-page">
   <h1>ランダム通知リマインダー</h1>
 
-  <h2>今日の通知</h2>
-  <p>LINEの返信はした？</p>
+  <main class="home-main">
+    <section class="notification-card">
+      <div class="notification-icon">🔔</div>
 
-  <button>通知を表示する</button>
-  <button onclick="location.href='task-form.html'">タスクを登録する</button>
+      <h2>LINEの返信はした？</h2>
+      <p>返信を忘れているメッセージがないか確認しよう</p>
 
-  <button onclick="location.href='task-list.html'">タスク一覧を見る</button>
+      <button>通知を表示する</button>
+    </section>
+  </main>
 
+  <nav class="bottom-nav">
+    <a href="index.html">
+      <span class="icon">🏠</span>
+      <span>Home</span>
+    </a>
 
-  <button onclick="location.href='notification-settings.html'">通知設定</button>
+    <a href="task-form.html">
+      <span class="icon">➕</span>
+      <span>Add</span>
+    </a>
 
+    <a href="task-list.html">
+      <span class="icon">📋</span>
+      <span>List</span>
+    </a>
 
+    <a href="notification-settings.html">
+      <span class="icon">⚙️</span>
+      <span>Setting</span>
+    </a>
+  </nav>
 </body>
 </html>

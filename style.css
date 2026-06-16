@@ -1,17 +1,296 @@
+/* ===== 全体設定 ===== */
+* {
+  box-sizing: border-box;
+}
+
 body {
-  background-color: #f5f7fb;
-  font-family: Arial, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, "Hiragino Sans", "Yu Gothic", sans-serif;
+  background-color: #000;
+  color: #fff;
+  padding: 24px;
 }
 
+/* ===== 見出し ===== */
 h1 {
-  color: #333;
   text-align: center;
+  font-size: 26px;
+  color: #fff;
+  margin: 0 0 24px;
+  font-weight: bold;
 }
 
-button {
-  background-color: #4f7cff;
-  color: white;
+h2 {
+  font-size: 20px;
+  color: #fff;
+  margin-bottom: 16px;
+}
+
+/* ===== ホーム画面 ===== */
+.home-page {
+  padding-bottom: 90px;
+}
+
+.home-main {
+  min-height: calc(100vh - 160px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.notification-card {
+  max-width: 420px;
+  width: 100%;
+  background-color: #111;
+  border: 1px solid #222;
+  border-radius: 24px;
+  padding: 32px 24px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.08);
+}
+
+.notification-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.notification-card h2 {
+  margin: 0 0 12px;
+  font-size: 24px;
+}
+
+.notification-card p {
+  margin-bottom: 24px;
+}
+
+/* ===== メインの箱 ===== */
+form,
+.menu,
+.card {
+  max-width: 520px;
+  margin: 0 auto;
+  background-color: #111;
+  padding: 24px;
+  border-radius: 22px;
+  border: 1px solid #222;
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.08);
+}
+
+/* ===== 入力項目 ===== */
+.form-group {
+  margin-bottom: 18px;
+}
+
+label {
+  display: block;
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #f1f1f1;
+}
+
+/* ===== 入力欄 ===== */
+input[type="text"],
+input[type="time"],
+input[type="date"],
+input[type="number"],
+textarea,
+select {
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #333;
+  border-radius: 14px;
+  font-size: 15px;
+  background-color: #000;
+  color: #fff;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #888;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
+}
+
+/* ===== ラジオボタン ===== */
+.radios {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.radios label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
+  margin-bottom: 0;
+}
+
+/* ===== 横並び ===== */
+.inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ===== ボタン ===== */
+button,
+.btn,
+a.button {
+  width: min(360px, 100%);
+  max-width: 360px;
+  display: block;
+  text-align: center;
+  padding: 14px;
+  background-color: #fff;
+  color: #000;
   border: none;
-  padding: 12px;
-  border-radius: 8px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: bold;
+  text-decoration: none;
+  cursor: pointer;
+  margin: 12px auto 0;
+}
+
+button:hover,
+.btn:hover,
+a.button:hover {
+  background-color: #e6e6e6;
+}
+
+/* サブボタン */
+.btn-secondary {
+  background-color: #222;
+  color: #fff;
+  border: 1px solid #444;
+}
+
+.btn-secondary:hover {
+  background-color: #333;
+}
+
+/* ボタン周辺 */
+.actions {
+  margin-top: 24px;
+}
+
+/* ===== タスク一覧 ===== */
+.task-item {
+  max-width: 520px;
+  margin: 0 auto 14px;
+  background-color: #111;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid #222;
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.06);
+}
+
+.task-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 6px;
+  color: #fff;
+}
+
+.task-detail,
+.task-time {
+  font-size: 14px;
+  color: #bbb;
+}
+
+/* ===== 小さい説明文など ===== */
+p {
+  color: #ddd;
+  line-height: 1.6;
+}
+
+/* ===== 下ナビ ===== */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+
+  background-color: #111;
+  border-top: 1px solid #333;
+
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+
+  height: 70px;
+}
+
+.bottom-nav a {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+
+  background: none;
+  color: white;
+  text-decoration: none;
+
+  font-size: 12px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.bottom-nav a:hover {
+  background: none;
+  opacity: 0.7;
+}
+
+.bottom-nav .icon {
+  font-size: 24px;
+}
+
+/* ===== スマホ対応 ===== */
+@media screen and (max-width: 600px) {
+  body {
+    padding: 16px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  form,
+  .menu,
+  .card {
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .inline {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .radios {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .notification-card {
+    padding: 28px 20px;
+  }
 }
