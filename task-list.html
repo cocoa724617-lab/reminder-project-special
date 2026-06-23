@@ -23,6 +23,15 @@
     function loadTemp() { return JSON.parse(localStorage.getItem('tasks_temp') || '[]'); }
     function saveTemp(temp) { localStorage.setItem('tasks_temp', JSON.stringify(temp)); }
 
+    function formatTaskPriority(priority) {
+      const value = String(priority || '').trim().toLowerCase();
+
+      if (value === 'high' || value === '高' || value.includes('高') || value.includes('鬮')) return '高';
+      if (value === 'low' || value === '低' || value.includes('低') || value.includes('菴')) return '低';
+      if (value === 'medium' || value === '中' || value.includes('中') || value.includes('荳')) return '中';
+      return priority || '-';
+    }
+
     const taskList = document.getElementById('task-list');
 
     function render() {
@@ -42,7 +51,7 @@
           <h3>${task.title || task.name || '(無題)'}</h3>
           <p>期限：${task.date || task.dueDate || '未設定'}</p>
           <p>カテゴリ：${task.category || '-'}</p>
-          <p>優先度：${task.priority || '-'}</p>
+          <p>重要度: ${formatTaskPriority(task.priority || task.importance || task.priorityLevel)}</p>
           <p>状態：${task.status || (task.enabled ? '有効' : '無効')}</p>
           <p>メモ：${task.memo || task.description || 'なし'}</p>
           <button id="complete-${index}">完了</button>

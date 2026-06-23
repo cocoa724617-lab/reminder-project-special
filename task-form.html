@@ -48,6 +48,15 @@
     </div>
 
     <div class="form-group">
+      <label for="task-priority">重要度</label>
+      <select id="task-priority" name="priority">
+        <option value="low">低</option>
+        <option value="medium" selected>中</option>
+        <option value="high">高</option>
+      </select>
+    </div>
+
+    <div class="form-group">
       <label for="task-repeat">提出頻度（繰り返し）</label>
       <select id="task-repeat" name="repeatType">
         <option value="none">なし（単発）</option>
@@ -88,6 +97,14 @@
       customRepeat.style.display = repeatSelect.value === 'custom' ? 'block' : 'none';
     });
 
+    function normalizePriorityValue(priority) {
+      const value = String(priority || '').trim().toLowerCase();
+
+      if (value === 'high' || value === '高' || value.includes('高') || value.includes('鬮')) return 'high';
+      if (value === 'low' || value === '低' || value.includes('低') || value.includes('菴')) return 'low';
+      return 'medium';
+    }
+
     function populateForm(task) {
       document.getElementById('task-name').value = task.name || task.title || '';
       document.getElementById('task-desc').value = task.description || task.memo || '';
@@ -101,6 +118,7 @@
       document.querySelectorAll('input[name="notification-type"]').forEach(cb => { cb.checked = types.includes(cb.value); });
 
       document.getElementById('task-due').value = task.dueDate || task.date || '';
+      document.getElementById('task-priority').value = normalizePriorityValue(task.priority || task.importance || task.priorityLevel || 'medium');
       if (task.repeat) {
         document.getElementById('task-repeat').value = task.repeat.type || 'none';
         if (task.repeat.type === 'custom') {
@@ -136,6 +154,7 @@
         notifyDate: formData.get('notifyDate') || null,
         enabled: document.getElementById('task-enable').checked,
         frequency: formData.get('frequency') || 'medium',
+        priority: formData.get('priority') || 'medium',
         notificationTypes: formData.getAll('notification-type'),
         dueDate: formData.get('dueDate') || null,
         repeat: repeat

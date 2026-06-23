@@ -20,6 +20,17 @@
     </section>
   </main>
 
+  <div id="popup-notification" class="popup-notification-overlay" aria-hidden="true">
+    <section class="popup-notification" role="dialog" aria-modal="true" aria-labelledby="popup-notification-title">
+      <div class="popup-notification-header">
+        <h2 id="popup-notification-title">アプリ内通知</h2>
+        <button type="button" class="popup-close-button" onclick="closePopupNotification()">閉じる</button>
+      </div>
+      <p class="popup-notification-lead">今確認したいタスクがあります。</p>
+      <div id="popup-notification-list" class="popup-task-list"></div>
+    </section>
+  </div>
+
   <nav class="bottom-nav">
     <a href="index.html">
       <span class="icon">🏠</span>
@@ -41,5 +52,164 @@
       <span>Setting</span>
     </a>
   </nav>
+  <script>
+    function loadPopupTasks() {
+      try {
+        return JSON.parse(localStorage.getItem('tasks') || '[]');
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function getLocalTodayString() {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function normalizeDateValue(value) {
+      if (!value) return '';
+      return String(value).slice(0, 10);
+    }
+
+    function getTaskDueDate(task) {
+      return task.dueDate || task.date || '';
+    }
+
+    function getTaskTitle(task) {
+      return task.title || task.name || '無題のタスク';
+    }
+
+    function getTaskPriority(task) {
+      return task.priority || task.importance || task.priorityLevel || '-';
+    }
+
+    function formatPopupPriority(priority) {
+      const value = String(priority || '').trim().toLowerCase();
+
+      if (value === 'high' || value === '高' || value.includes('高') || value.includes('鬮')) return '高';
+      if (value === 'low' || value === '低' || value.includes('低') || value.includes('菴')) return '低';
+      if (value === 'medium' || value === '中' || value.includes('中') || value.includes('荳')) return '中';
+      return priority || '-';
+    }
+
+    function isTodayTask(task) {
+      return normalizeDateValue(getTaskDueDate(task)) === getLocalTodayString();
+    }
+
+    function isImportantTask(task) {
+      const priority = String(getTaskPriority(task)).trim().toLowerCase();
+      return priority === 'high' || priority === '高' || priority.includes('高') || priority.includes('鬮');
+    }
+
+    function isLaterTask(task) {
+      const status = String(task.status || '').trim().toLowerCase();
+      return task.later === true ||
+        task.doLater === true ||
+        task.isLater === true ||
+        task.remindLater === true ||
+        task.laterTask === true ||
+        task.snoozed === true ||
+        task.postponed === true ||
+        status === '後でやる' ||
+        status === 'later' ||
+        status.includes('後で') ||
+        status.includes('蠕後〒');
+    }
+
+    function getTodayTasks(tasks) {
+      return (tasks || loadPopupTasks()).filter(isTodayTask);
+    }
+
+    function getImportantTasks(tasks) {
+      return (tasks || loadPopupTasks()).filter(isImportantTask);
+    }
+
+    function getLaterTasks(tasks) {
+      return (tasks || loadPopupTasks()).filter(isLaterTask);
+    }
+
+    function getPopupNotificationReasons(task) {
+      const reasons = [];
+
+      if (isTodayTask(task)) reasons.push('期限が今日');
+      if (isImportantTask(task)) reasons.push('重要度が高い');
+      if (isLaterTask(task)) reasons.push('後でやる設定');
+
+      return reasons;
+    }
+
+    function checkPopupNotifications() {
+      const tasks = loadPopupTasks();
+      const notificationTasks = tasks
+        .map(function(task) {
+          return Object.assign({}, task, {
+            notificationReasons: getPopupNotificationReasons(task)
+          });
+        })
+        .filter(function(task) {
+          return task.notificationReasons.length > 0;
+        });
+
+      if (notificationTasks.length > 0) {
+        showPopupNotifications(notificationTasks);
+      }
+    }
+
+    function showPopupNotifications(tasks) {
+      const popup = document.getElementById('popup-notification');
+      const list = document.getElementById('popup-notification-list');
+
+      if (!popup || !list) return;
+
+      list.innerHTML = '';
+
+      tasks.forEach(function(task) {
+        const item = document.createElement('article');
+        item.className = 'popup-task-item';
+
+        const title = document.createElement('h3');
+        title.textContent = getTaskTitle(task);
+
+        const dueDate = document.createElement('p');
+        dueDate.textContent = `期限: ${getTaskDueDate(task) || '未設定'}`;
+
+        const priority = document.createElement('p');
+        priority.textContent = `重要度: ${formatPopupPriority(getTaskPriority(task))}`;
+
+        const reason = document.createElement('p');
+        reason.className = 'popup-task-reason';
+        reason.textContent = `通知理由: ${task.notificationReasons.join(' / ')}`;
+
+        item.appendChild(title);
+        item.appendChild(dueDate);
+        item.appendChild(priority);
+        item.appendChild(reason);
+        list.appendChild(item);
+      });
+
+      popup.classList.add('is-visible');
+      popup.setAttribute('aria-hidden', 'false');
+    }
+
+    function closePopupNotification() {
+      const popup = document.getElementById('popup-notification');
+      if (!popup) return;
+
+      popup.classList.remove('is-visible');
+      popup.setAttribute('aria-hidden', 'true');
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      checkPopupNotifications();
+
+      const showButton = document.querySelector('.notification-card button');
+      if (showButton) {
+        showButton.addEventListener('click', checkPopupNotifications);
+      }
+    });
+  </script>
 </body>
 </html>

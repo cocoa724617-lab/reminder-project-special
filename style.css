@@ -65,6 +65,86 @@ h2 {
 }
 
 /* ===== メインの箱 ===== */
+.popup-notification-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: rgba(0, 0, 0, 0.72);
+}
+
+.popup-notification-overlay.is-visible {
+  display: flex;
+}
+
+.popup-notification {
+  width: min(560px, 100%);
+  max-height: min(720px, 82vh);
+  overflow-y: auto;
+  background-color: #111;
+  border: 1px solid #333;
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 18px 48px rgba(255, 255, 255, 0.14);
+}
+
+.popup-notification-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.popup-notification-header h2 {
+  margin: 0;
+}
+
+.popup-close-button {
+  width: auto;
+  min-width: 88px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.popup-notification-lead {
+  margin: 0 0 16px;
+}
+
+.popup-task-list {
+  display: grid;
+  gap: 12px;
+}
+
+.popup-task-item {
+  background-color: #000;
+  border: 1px solid #2d2d2d;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.popup-task-item h3 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 17px;
+}
+
+.popup-task-item p {
+  margin: 4px 0;
+  color: #d8d8d8;
+  font-size: 14px;
+}
+
+.popup-task-reason {
+  color: #fff;
+  font-weight: bold;
+}
+
 form,
 .menu,
 .card {
@@ -292,5 +372,19 @@ p {
 
   .notification-card {
     padding: 28px 20px;
+  }
+
+  .popup-notification {
+    max-height: 78vh;
+    padding: 18px;
+  }
+
+  .popup-notification-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .popup-close-button {
+    width: 100%;
   }
 }
