@@ -48,6 +48,7 @@
         taskCard.className = 'task-card';
 
         taskCard.innerHTML = `
+<<<<<<< HEAD
           <h3>${task.title || task.name || '(無題)'}</h3>
           <p>期限：${task.date || task.dueDate || '未設定'}</p>
           <p>カテゴリ：${task.category || '-'}</p>
@@ -57,6 +58,21 @@
           <button id="complete-${index}">完了</button>
           <button id="delay-${index}">後でやる</button>
           <button id="edit-${index}">編集</button>
+=======
+          <div class="task-info">
+            <h3>${task.title || task.name || '(無題)'}</h3>
+            <p>期限：${task.date || task.dueDate || '未設定'}</p>
+            <p>カテゴリ：${task.category || '-'}</p>
+            <p>優先度：${task.priority || '-'}</p>
+            <p>状態：${task.status || '未完了'}</p>
+            <p>メモ：${task.memo || task.description || 'なし'}</p>
+          </div>
+          <div class="task-actions">
+            <button id="complete-${index}">完了</button>
+            <button id="delay-${index}">後でやる</button>
+            <button id="edit-${index}">編集</button>
+          </div>
+>>>>>>> 8ff76d5d043f0d1b2c12c67436892f23911d135d
         `;
 
         taskList.appendChild(taskCard);
@@ -105,5 +121,28 @@
 
     render();
   </script>
+
+<nav class="bottom-nav">
+  <a href="index.html">
+    <span class="icon">🏠</span>
+    <span>Home</span>
+  </a>
+
+  <a href="task-form.html">
+    <span class="icon">➕</span>
+    <span>Add</span>
+  </a>
+
+  <a href="task-list.html">
+    <span class="icon">📋</span>
+    <span>List</span>
+  </a>
+
+  <a href="notification-settings.html">
+    <span class="icon">⚙️</span>
+    <span>Setting</span>
+  </a>
+</nav>
+
 </body>
 </html>

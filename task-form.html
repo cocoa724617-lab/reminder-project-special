@@ -137,6 +137,7 @@
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const tasks = loadTasks();
+      const existingTask = editId ? tasks.find(t => t.id === editId) : null;
       const formData = new FormData(form);
       const repeatType = formData.get('repeatType');
       const repeat = repeatType === 'none' ? null : {
@@ -153,6 +154,7 @@
         time: formData.get('time'),
         notifyDate: formData.get('notifyDate') || null,
         enabled: document.getElementById('task-enable').checked,
+        status: (existingTask && existingTask.status) || '未完了',
         frequency: formData.get('frequency') || 'medium',
         priority: formData.get('priority') || 'medium',
         notificationTypes: formData.getAll('notification-type'),
@@ -172,5 +174,28 @@
       location.href = 'task-list.html';
     });
   </script>
+
+<nav class="bottom-nav">
+  <a href="index.html">
+    <span class="icon">🏠</span>
+    <span>Home</span>
+  </a>
+
+  <a href="task-form.html">
+    <span class="icon">➕</span>
+    <span>Add</span>
+  </a>
+
+  <a href="task-list.html">
+    <span class="icon">📋</span>
+    <span>List</span>
+  </a>
+
+  <a href="notification-settings.html">
+    <span class="icon">⚙️</span>
+    <span>Setting</span>
+  </a>
+</nav>
+
 </body>
 </html>
