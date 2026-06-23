@@ -119,6 +119,7 @@
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const tasks = loadTasks();
+      const existingTask = editId ? tasks.find(t => t.id === editId) : null;
       const formData = new FormData(form);
       const repeatType = formData.get('repeatType');
       const repeat = repeatType === 'none' ? null : {
@@ -135,6 +136,7 @@
         time: formData.get('time'),
         notifyDate: formData.get('notifyDate') || null,
         enabled: document.getElementById('task-enable').checked,
+        status: (existingTask && existingTask.status) || '未完了',
         frequency: formData.get('frequency') || 'medium',
         notificationTypes: formData.getAll('notification-type'),
         dueDate: formData.get('dueDate') || null,
