@@ -13,7 +13,7 @@
 
     <a href="task-form.html" class="button-link">タスクを追加する</a>
     <a href="index.html" class="button-link">ホームに戻る</a>
-    <a href="task-temp.html" class="button-link">一時保存を見る</a>
+   
   </section>
 
   <script>
@@ -48,23 +48,12 @@
         taskCard.className = 'task-card';
 
         taskCard.innerHTML = `
-<<<<<<< HEAD
-          <h3>${task.title || task.name || '(無題)'}</h3>
-          <p>期限：${task.date || task.dueDate || '未設定'}</p>
-          <p>カテゴリ：${task.category || '-'}</p>
-          <p>重要度: ${formatTaskPriority(task.priority || task.importance || task.priorityLevel)}</p>
-          <p>状態：${task.status || (task.enabled ? '有効' : '無効')}</p>
-          <p>メモ：${task.memo || task.description || 'なし'}</p>
-          <button id="complete-${index}">完了</button>
-          <button id="delay-${index}">後でやる</button>
-          <button id="edit-${index}">編集</button>
-=======
           <div class="task-info">
             <h3>${task.title || task.name || '(無題)'}</h3>
             <p>期限：${task.date || task.dueDate || '未設定'}</p>
             <p>カテゴリ：${task.category || '-'}</p>
-            <p>優先度：${task.priority || '-'}</p>
-            <p>状態：${task.status || '未完了'}</p>
+            <p>優先度：${formatTaskPriority(task.priority || task.importance || task.priorityLevel)}</p>
+            <p>状態：${task.status || '後でやる'}</p>
             <p>メモ：${task.memo || task.description || 'なし'}</p>
           </div>
           <div class="task-actions">
@@ -72,7 +61,6 @@
             <button id="delay-${index}">後でやる</button>
             <button id="edit-${index}">編集</button>
           </div>
->>>>>>> 8ff76d5d043f0d1b2c12c67436892f23911d135d
         `;
 
         taskList.appendChild(taskCard);
@@ -84,7 +72,7 @@
     }
 
     function completeTask(index) {
-      if (!confirm('このタスクを完了（削除）しますか？ 一時保存に移動します。')) return;
+      if (!confirm('このタスクを完了（削除）しますか？')) return;
       const tasks = loadTasks();
       const removed = tasks.splice(index, 1)[0];
       saveTasks(tasks);
