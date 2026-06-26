@@ -43,7 +43,17 @@
         return;
       }
 
-      tasks.forEach(function(task, index) {
+      const sortedIndices = tasks.map((_, i) => i);
+      sortedIndices.sort(function(a, b) {
+        const statusA = (tasks[a].status || '').trim();
+        const statusB = (tasks[b].status || '').trim();
+        const doneA = (statusA === '完了' || statusA === '後でやる') ? 1 : 0;
+        const doneB = (statusB === '完了' || statusB === '後でやる') ? 1 : 0;
+        return doneA - doneB;
+      });
+
+      sortedIndices.forEach(function(index) {
+        const task = tasks[index];
         const taskCard = document.createElement('div');
         taskCard.className = 'task-card';
 

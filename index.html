@@ -13,10 +13,10 @@
     <section class="notification-card">
       <div class="notification-icon">🔔</div>
 
-      <h2>LINEの返信はした？</h2>
-      <p>返信を忘れているメッセージがないか確認しよう</p>
+      <h2>通知を確認した？</h2>
+      <p>未完了のタスクがないか確認しよう</p>
 
-      <button>通知を表示する</button>
+      <a href="task-list.html" class="button-link">タスクを確認する</a>
     </section>
   </main>
 
@@ -205,11 +205,59 @@
     document.addEventListener('DOMContentLoaded', function() {
       checkPopupNotifications();
 
-      const showButton = document.querySelector('.notification-card button');
+      const showButton = document.querySelector('.notification-card .button-link');
       if (showButton) {
-        showButton.addEventListener('click', checkPopupNotifications);
+        showButton.addEventListener('click', function() {
+          checkPopupNotifications();
+        });
       }
     });
+  </script>
+
+  <script type="module">
+    console.log("Firebase通知コード開始");
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+    import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging.js";
+    import { VAPID_KEY } from "./fcm-config.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCHf5uiktc7MJIQ2oWopYoMTYyfS7CwkIw",
+      authDomain: "reminder-project-4b576.firebaseapp.com",
+      projectId: "reminder-project-4b576",
+      storageBucket: "reminder-project-4b576.firebasestorage.app",
+      messagingSenderId: "590449260772",
+      appId: "1:590449260772:web:c3b859071d04abdcaf94f1",
+      measurementId: "G-2364V1ENYR"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+
+    async function requestNotificationPermission() {
+      try {
+        const permission = await Notification.requestPermission();
+
+        if (permission !== "granted") {
+          console.log("通知が許可されませんでした");
+          return;
+        }
+
+        const token = await getToken(messaging, {
+          vapidKey: VAPID_KEY
+        });
+
+        if (token) {
+          console.log("FCMトークン:", token);
+        } else {
+          console.log("FCMトークンを取得できませんでした");
+        }
+      } catch (error) {
+        console.error("通知許可またはトークン取得でエラー:", error);
+      }
+    }
+
+    requestNotificationPermission();
   </script>
 </body>
 </html>

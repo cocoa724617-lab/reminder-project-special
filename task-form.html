@@ -78,7 +78,7 @@
     </div>
 
     <div class="actions">
-      <button type="submit">保存</button>
+      <button id="saveTaskButton" type="button">保存</button>
       <button type="button" onclick="location.href='task-list.html'">キャンセル</button>
     </div>
   </form>
@@ -134,11 +134,33 @@
       if (task) populateForm(task);
     }
 
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
+    document.getElementById('saveTaskButton').addEventListener('click', async () => {
+      const formData = new FormData(form);
+
+      const errors = [];
+      if (!formData.get('name') || !formData.get('name').trim()) {
+        errors.push('・タスク名を入力してください');
+      }
+      if (!formData.get('notifyDate')) {
+        errors.push('・通知日付を入力してください');
+      }
+      if (!formData.get('time')) {
+        errors.push('・通知時刻を入力してください');
+      }
+      if (!window.currentFcmToken) {
+        errors.push('・通知が許可されていません。ブラウザの通知を許可してからもう一度お試しください');
+      }
+      if (!window.saveReminderToFirestore) {
+        errors.push('・通知サービスの読み込みに失敗しました。ページを再読み込みしてください');
+      }
+
+      if (errors.length > 0) {
+        alert('以下の項目を確認してください：\n\n' + errors.join('\n'));
+        return;
+      }
+
       const tasks = loadTasks();
       const existingTask = editId ? tasks.find(t => t.id === editId) : null;
-      const formData = new FormData(form);
       const repeatType = formData.get('repeatType');
       const repeat = repeatType === 'none' ? null : {
         type: repeatType,
@@ -148,11 +170,11 @@
       const taskObj = {
         id: editId || Date.now().toString(),
         name: formData.get('name'),
-        title: formData.get('name'), // keep both title and name for compatibility
+        title: formData.get('name'),
         description: formData.get('description'),
         memo: formData.get('description'),
         time: formData.get('time'),
-        notifyDate: formData.get('notifyDate') || null,
+        notifyDate: formData.get('notifyDate'),
         enabled: document.getElementById('task-enable').checked,
         status: (existingTask && existingTask.status) || '未完了',
         frequency: formData.get('frequency') || 'medium',
@@ -170,6 +192,11 @@
         tasks.push(taskObj);
       }
       saveTasks(tasks);
+
+      const remindAt = taskObj.notifyDate + "T" + taskObj.time + ":00+09:00";
+      console.log("Firestoreに保存開始:", taskObj.name, remindAt);
+      await window.saveReminderToFirestore(taskObj.name, remindAt, window.currentFcmToken);
+
       alert('保存しました');
       location.href = 'task-list.html';
     });
@@ -197,5 +224,70 @@
   </a>
 </nav>
 
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+    import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      serverTimestamp,
+      Timestamp
+    } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+    import { VAPID_KEY } from "./fcm-config.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCHf5uiktc7MJIQ2oWopYoMTYyfS7CwkIw",
+      authDomain: "reminder-project-4b576.firebaseapp.com",
+      projectId: "reminder-project-4b576",
+      storageBucket: "reminder-project-4b576.firebasestorage.app",
+      messagingSenderId: "590449260772",
+      appId: "1:590449260772:web:c3b859071d04abdcaf94f1",
+      measurementId: "G-2364V1ENYR"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+    const db = getFirestore(app);
+
+    window.currentFcmToken = null;
+
+    window.saveReminderToFirestore = async function(title, remindAt, token) {
+      try {
+        const docRef = await addDoc(collection(db, "reminders"), {
+          title: title,
+          body: "リマインダー通知です",
+          remindAt: Timestamp.fromDate(new Date(remindAt)),
+          fcmToken: token,
+          notified: false,
+          createdAt: serverTimestamp()
+        });
+        console.log("Firestore保存成功:", docRef.id);
+      } catch (error) {
+        console.error("Firestore保存エラー:", error);
+      }
+    };
+
+    async function requestNotificationPermission() {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          console.log("通知が許可されませんでした");
+          return;
+        }
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        if (token) {
+          console.log("FCMトークン:", token);
+          window.currentFcmToken = token;
+        } else {
+          console.log("FCMトークンを取得できませんでした");
+        }
+      } catch (error) {
+        console.error("通知許可またはトークン取得でエラー:", error);
+      }
+    }
+
+    requestNotificationPermission();
+  </script>
 </body>
 </html>
