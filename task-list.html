@@ -19,7 +19,7 @@
 
   <script type="module">
     import { requireAuth } from "./auth-guard.js";
-    import { loadTasks, setTaskStatus, completeTask as completeTaskInFirestore } from "./tasks-data.js";
+    import { loadTasks, completeTask as completeTaskInFirestore } from "./tasks-data.js";
 
     function formatTaskPriority(priority) {
       const value = String(priority || '').trim().toLowerCase();
@@ -88,10 +88,8 @@
       render();
     }
 
-    async function delayTask(index) {
-      tasks[index].status = '後でやる';
-      await setTaskStatus(currentUser.uid, tasks[index].id, '後でやる');
-      render();
+    function delayTask(index) {
+      location.href = `atodeyaru.html?id=${tasks[index].id}`;
     }
 
     function editTask(index) {

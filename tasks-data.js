@@ -40,6 +40,10 @@ export async function setTaskStatus(uid, taskId, status) {
   await updateDoc(doc(db, "users", uid, "tasks", taskId), { status });
 }
 
+export async function delayTaskWithLaterTime(uid, taskId, laterTime) {
+  await updateDoc(doc(db, "users", uid, "tasks", taskId), { status: '後でやる', laterTime });
+}
+
 async function cancelPendingReminders(uid, taskId) {
   const remindersQuery = query(
     collection(db, "reminders"),

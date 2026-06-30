@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja" class="auth-checking">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>あとでやる</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="atodeyaru-page">
+  <main class="atodeyaru-main">
+    <section class="atodeyaru-content" aria-labelledby="later-message">
+      <h1 id="later-message" class="atodeyaru-message"></h1>
+      <p class="atodeyaru-question">いつやるの？</p>
+
+      <div class="later-time-options" role="group" aria-label="あとでやる時間">
+        <button type="button" class="later-time-button" data-value="10分後">10分後</button>
+        <button type="button" class="later-time-button" data-value="30分後">30分後</button>
+        <button type="button" class="later-time-button" data-value="1時間後">1時間後</button>
+        <button type="button" class="later-time-button" data-value="今日の夜">今日の夜</button>
+        <button type="button" class="later-time-button" data-value="明日の朝">明日の朝</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <a href="index.html">
+      <span class="icon">H</span>
+      <span>Home</span>
+    </a>
+
+    <a href="task-form.html">
+      <span class="icon">+</span>
+      <span>Add</span>
+    </a>
+
+    <a href="task-list.html">
+      <span class="icon">L</span>
+      <span>List</span>
+    </a>
+
+    <a href="notification-settings.html">
+      <span class="icon">S</span>
+      <span>Setting</span>
+    </a>
+  </nav>
+
+  <script type="module">
+    import { requireAuth } from "./auth-guard.js";
+    import { delayTaskWithLaterTime } from "./tasks-data.js";
+
+    const laterMessages = [
+      'いつやるの？今でしょ',
+      'そんなんだからダメなんだよ',
+      '社不すぎる'
+    ];
+
+    const params = new URLSearchParams(location.search);
+    const taskId = params.get('id');
+    let currentUser = null;
+
+    function showRandomLaterMessage() {
+      const messageElement = document.getElementById('later-message');
+      const randomIndex = Math.floor(Math.random() * laterMessages.length);
+      messageElement.textContent = laterMessages[randomIndex];
+    }
+
+    async function selectLaterTime(button) {
+      document.querySelectorAll('.later-time-button').forEach(function(optionButton) {
+        optionButton.classList.remove('is-selected');
+        optionButton.setAttribute('aria-pressed', 'false');
+      });
+
+      button.classList.add('is-selected');
+      button.setAttribute('aria-pressed', 'true');
+      const laterTime = button.dataset.value;
+
+      if (!taskId) {
+        location.href = 'task-list.html';
+        return;
+      }
+
+      await delayTaskWithLaterTime(currentUser.uid, taskId, laterTime);
+      location.href = 'task-list.html';
+    }
+
+    async function init() {
+      currentUser = await requireAuth();
+      showRandomLaterMessage();
+
+      document.querySelectorAll('.later-time-button').forEach(function(button) {
+        button.setAttribute('aria-pressed', 'false');
+        button.addEventListener('click', function() {
+          selectLaterTime(button);
+        });
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
