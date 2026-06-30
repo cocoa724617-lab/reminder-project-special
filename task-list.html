@@ -100,7 +100,7 @@
       const tasks = loadTasks();
       tasks[index].status = '後でやる';
       saveTasks(tasks);
-      render();
+      location.href = 'atodeyaru.html';
     }
 
     function editTask(index) {
