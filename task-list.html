@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>タスク一覧</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -16,12 +17,9 @@
    
   </section>
 
-  <script>
-    function loadTasks() { return JSON.parse(localStorage.getItem('tasks') || '[]'); }
-    function saveTasks(tasks) { localStorage.setItem('tasks', JSON.stringify(tasks)); }
-
-    function loadTemp() { return JSON.parse(localStorage.getItem('tasks_temp') || '[]'); }
-    function saveTemp(temp) { localStorage.setItem('tasks_temp', JSON.stringify(temp)); }
+  <script type="module">
+    import { requireAuth } from "./auth-guard.js";
+    import { loadTasks, setTaskStatus, completeTask as completeTaskInFirestore } from "./tasks-data.js";
 
     function formatTaskPriority(priority) {
       const value = String(priority || '').trim().toLowerCase();
@@ -33,9 +31,10 @@
     }
 
     const taskList = document.getElementById('task-list');
+    let currentUser = null;
+    let tasks = [];
 
     function render() {
-      const tasks = loadTasks();
       taskList.innerHTML = '';
 
       if (tasks.length === 0) {
@@ -81,43 +80,31 @@
       });
     }
 
-    function completeTask(index) {
+    async function completeTask(index) {
       if (!confirm('このタスクを完了（削除）しますか？')) return;
-      const tasks = loadTasks();
-      const removed = tasks.splice(index, 1)[0];
-      saveTasks(tasks);
-
-      // 一時保存に移動
-      const temp = loadTemp();
-      removed.deletedAt = new Date().toISOString();
-      temp.push(removed);
-      saveTemp(temp);
-
+      const removed = tasks[index];
+      await completeTaskInFirestore(currentUser.uid, removed);
+      tasks.splice(index, 1);
       render();
     }
 
-    function delayTask(index) {
-      const tasks = loadTasks();
+    async function delayTask(index) {
       tasks[index].status = '後でやる';
-      saveTasks(tasks);
+      await setTaskStatus(currentUser.uid, tasks[index].id, '後でやる');
       render();
     }
 
     function editTask(index) {
-      const tasks = loadTasks();
-      const task = tasks[index];
-      // タスクの id がなければ生成して保存 so edit via index -> open form without id might not edit
-      if (task.id) {
-        location.href = `task-form.html?id=${task.id}`;
-      } else {
-        // fallback: save tasks with generated ids and go to the edit page
-        tasks.forEach((t, i) => { if (!t.id) t.id = Date.now().toString() + '_' + i; });
-        saveTasks(tasks);
-        location.href = `task-form.html?id=${tasks[index].id}`;
-      }
+      location.href = `task-form.html?id=${tasks[index].id}`;
     }
 
-    render();
+    async function init() {
+      currentUser = await requireAuth();
+      tasks = await loadTasks(currentUser.uid);
+      render();
+    }
+
+    init();
   </script>
 
 <nav class="bottom-nav">

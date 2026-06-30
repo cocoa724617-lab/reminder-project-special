@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ランダム通知リマインダー</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -52,11 +53,18 @@
       <span>Setting</span>
     </a>
   </nav>
-  <script>
-    function loadPopupTasks() {
+  <script type="module">
+    import { requireAuth } from "./auth-guard.js";
+    import { loadTasks } from "./tasks-data.js";
+
+    let currentUser = null;
+
+    async function loadPopupTasks() {
+      if (!currentUser) return [];
       try {
-        return JSON.parse(localStorage.getItem('tasks') || '[]');
+        return await loadTasks(currentUser.uid);
       } catch (error) {
+        console.error("タスク取得エラー:", error);
         return [];
       }
     }
@@ -141,8 +149,8 @@
       return reasons;
     }
 
-    function checkPopupNotifications() {
-      const tasks = loadPopupTasks();
+    async function checkPopupNotifications() {
+      const tasks = await loadPopupTasks();
       const notificationTasks = tasks
         .map(function(task) {
           return Object.assign({}, task, {
@@ -201,8 +209,10 @@
       popup.classList.remove('is-visible');
       popup.setAttribute('aria-hidden', 'true');
     }
+    window.closePopupNotification = closePopupNotification;
 
-    document.addEventListener('DOMContentLoaded', function() {
+    async function init() {
+      currentUser = await requireAuth();
       checkPopupNotifications();
 
       const showButton = document.querySelector('.notification-card .button-link');
@@ -211,27 +221,20 @@
           checkPopupNotifications();
         });
       }
-    });
+    }
+
+    init();
   </script>
 
   <script type="module">
     console.log("Firebase通知コード開始");
 
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+    import { app } from "./firebase-init.js";
     import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging.js";
     import { VAPID_KEY } from "./fcm-config.js";
+    import { requireAuth } from "./auth-guard.js";
+    import { saveFcmToken } from "./user-data.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCHf5uiktc7MJIQ2oWopYoMTYyfS7CwkIw",
-      authDomain: "reminder-project-4b576.firebaseapp.com",
-      projectId: "reminder-project-4b576",
-      storageBucket: "reminder-project-4b576.firebasestorage.app",
-      messagingSenderId: "590449260772",
-      appId: "1:590449260772:web:c3b859071d04abdcaf94f1",
-      measurementId: "G-2364V1ENYR"
-    };
-
-    const app = initializeApp(firebaseConfig);
     const messaging = getMessaging(app);
 
     async function requestNotificationPermission() {
@@ -249,6 +252,8 @@
 
         if (token) {
           console.log("FCMトークン:", token);
+          const user = await requireAuth();
+          await saveFcmToken(user.uid, token);
         } else {
           console.log("FCMトークンを取得できませんでした");
         }

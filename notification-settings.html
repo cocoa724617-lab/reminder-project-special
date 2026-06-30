@@ -1,23 +1,27 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>通知設定</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="notification-settings-page">
   <h1>通知設定</h1>
 
-  <form>
+  <section id="user-info" class="user-info"></section>
+  <button id="logout-button" type="button" class="btn-secondary">ログアウト</button>
+
+  <form id="settings-form">
     <!-- 通知の頻度はタスクごとに設定するため、この画面では削除しました -->
 
     <h2>① 通知をランダムに実行していい時間帯（起きている時間）</h2>
     <label>
-      開始時刻: <input type="time" name="start-time" value="09:00">
+      開始時刻: <input id="start-time" type="time" name="start-time" value="09:00">
     </label>
     <br>
     <label>
-      終了時刻: <input type="time" name="end-time" value="21:00">
+      終了時刻: <input id="end-time" type="time" name="end-time" value="21:00">
     </label>
 
     <h2>② 通知を辞めてほしい時間を個別に設定する時間</h2>
@@ -55,7 +59,7 @@
   </form>
 
   <script>
-    function addExcludeTime() {
+    function addExcludeTime(startVal, endVal) {
       const container = document.getElementById('exclude-times-container');
       const newItem = document.createElement('div');
       newItem.className = 'exclude-time-item';
@@ -65,12 +69,114 @@
         <input type="time" name="exclude-end" placeholder="終了時刻">
         <button type="button" onclick="removeExcludeTime(this)">削除</button>
       `;
+      if (startVal) newItem.querySelector('[name="exclude-start"]').value = startVal;
+      if (endVal) newItem.querySelector('[name="exclude-end"]').value = endVal;
       container.appendChild(newItem);
     }
 
     function removeExcludeTime(button) {
       button.parentElement.remove();
     }
+  </script>
+
+  <script type="module">
+    import { requireAuth, logout } from "./auth-guard.js";
+    import { loadUserData, saveNotificationSettings } from "./user-data.js";
+
+    let currentUser = null;
+
+    function renderUserInfo(user) {
+      const userInfo = document.getElementById('user-info');
+      userInfo.innerHTML = '';
+
+      if (user.photoURL) {
+        const avatar = document.createElement('img');
+        avatar.src = user.photoURL;
+        avatar.alt = '';
+        userInfo.appendChild(avatar);
+      }
+
+      const textWrap = document.createElement('div');
+
+      const name = document.createElement('div');
+      name.className = 'user-name';
+      name.textContent = user.displayName || 'ユーザー';
+      textWrap.appendChild(name);
+
+      const email = document.createElement('div');
+      email.className = 'user-email';
+      email.textContent = user.email || '';
+      textWrap.appendChild(email);
+
+      userInfo.appendChild(textWrap);
+    }
+
+    function populateSettingsForm(settings) {
+      if (!settings) return;
+
+      if (settings.startTime) document.getElementById('start-time').value = settings.startTime;
+      if (settings.endTime) document.getElementById('end-time').value = settings.endTime;
+
+      if (Array.isArray(settings.excludeTimes) && settings.excludeTimes.length > 0) {
+        document.getElementById('exclude-times-container').innerHTML = '';
+        settings.excludeTimes.forEach((range) => {
+          addExcludeTime(range.start, range.end);
+        });
+      }
+
+      if (Array.isArray(settings.notificationTypes)) {
+        document.querySelectorAll('input[name="notification-type"]').forEach((cb) => {
+          cb.checked = settings.notificationTypes.includes(cb.value);
+        });
+      }
+
+      const enableCheckbox = document.querySelector('input[name="enable-notification"]');
+      if (enableCheckbox && typeof settings.enabled === 'boolean') {
+        enableCheckbox.checked = settings.enabled;
+      }
+    }
+
+    function collectExcludeTimes() {
+      const items = document.querySelectorAll('#exclude-times-container .exclude-time-item');
+      const ranges = [];
+      items.forEach((item) => {
+        const start = item.querySelector('[name="exclude-start"]').value;
+        const end = item.querySelector('[name="exclude-end"]').value;
+        if (start && end) ranges.push({ start, end });
+      });
+      return ranges;
+    }
+
+    async function init() {
+      currentUser = await requireAuth();
+      renderUserInfo(currentUser);
+
+      const userData = await loadUserData(currentUser.uid);
+      if (userData && userData.notificationSettings) {
+        populateSettingsForm(userData.notificationSettings);
+      }
+    }
+
+    document.getElementById('settings-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const settings = {
+        startTime: document.getElementById('start-time').value,
+        endTime: document.getElementById('end-time').value,
+        excludeTimes: collectExcludeTimes(),
+        notificationTypes: Array.from(document.querySelectorAll('input[name="notification-type"]:checked')).map((cb) => cb.value),
+        enabled: document.querySelector('input[name="enable-notification"]').checked
+      };
+
+      await saveNotificationSettings(currentUser.uid, settings);
+      alert('保存しました');
+    });
+
+    document.getElementById('logout-button').addEventListener('click', () => {
+      logout();
+    });
+
+    init();
   </script>
 
   <nav class="bottom-nav">

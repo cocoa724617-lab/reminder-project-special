@@ -3,6 +3,10 @@
   box-sizing: border-box;
 }
 
+html.auth-checking body {
+  visibility: hidden;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -62,6 +66,34 @@ h2 {
 
 .notification-card p {
   margin-bottom: 24px;
+}
+
+.login-error {
+  color: #ff6b6b;
+  font-weight: bold;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.user-info img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.user-info .user-name {
+  font-weight: bold;
+  color: #fff;
+}
+
+.user-info .user-email {
+  font-size: 13px;
+  color: #aaa;
 }
 
 /* ===== メインの箱 ===== */

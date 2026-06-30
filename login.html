@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja" class="auth-checking">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="home-page">
+  <h1>ランダム通知リマインダー</h1>
+
+  <main class="home-main">
+    <section class="notification-card">
+      <div class="notification-icon">🔔</div>
+      <h2>ログインしてはじめる</h2>
+      <p>Googleアカウントでログインしてください</p>
+
+      <button id="google-login-button" type="button">Googleでログイン</button>
+      <p id="login-error" class="login-error" style="display:none;"></p>
+    </section>
+  </main>
+
+  <script type="module">
+    import { auth, googleProvider } from "./firebase-init.js";
+    import { signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+
+    const errorEl = document.getElementById('login-error');
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        location.href = "index.html";
+        return;
+      }
+      document.documentElement.classList.remove('auth-checking');
+    });
+
+    document.getElementById('google-login-button').addEventListener('click', async () => {
+      errorEl.style.display = 'none';
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (error) {
+        console.error("ログインエラー:", error);
+        errorEl.textContent = "ログインに失敗しました。もう一度お試しください。";
+        errorEl.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

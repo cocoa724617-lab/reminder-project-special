@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>タスク登録 / 編集</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -20,11 +21,11 @@
     </div>
 
     <div class="form-group">
-      <label for="task-time">通知日時（任意）</label>
+      <label for="task-time">通知日時（頻度が「無し」の場合のみ必須）</label>
       <div style="display:flex; gap:8px; align-items:center;">
         <input id="task-notify-date" name="notifyDate" type="date" style="width:160px">
         <input id="task-time" name="time" type="time" style="width:120px">
-        <span class="small">※日付を指定すると指定日・時刻に通知、未指定なら毎日の指定時刻に通知されます</span>
+        <span class="small">※頻度を選んだ場合は毎日ランダムな時間に通知されるため、ここは空欄でOKです</span>
       </div>
     </div>
 
@@ -34,12 +35,14 @@
     </div>
 
     <div class="form-group">
-      <label>通知の頻度（タスク単位）</label>
+      <label>通知の頻度（1日あたり・タスク単位）</label>
       <div class="radios">
-        <label><input type="radio" name="frequency" value="small"> 小（1〜3）</label>
-        <label><input type="radio" name="frequency" value="medium" checked> 中（4〜6）</label>
-        <label><input type="radio" name="frequency" value="large"> 大（7〜9）</label>
+        <label><input type="radio" name="frequency" value="none"> 無し</label>
+        <label><input type="radio" name="frequency" value="small"> 小（1〜2回/日）</label>
+        <label><input type="radio" name="frequency" value="medium" checked> 中（3〜4回/日）</label>
+        <label><input type="radio" name="frequency" value="large"> 大（5〜7回/日）</label>
       </div>
+      <span class="small">「無し」以外を選ぶと、タスクを完了にするまで毎日ランダムな時間に通知します（通知してよい時間帯は⚙️設定で変更できます）</span>
     </div>
 
     <div class="form-group">
@@ -83,13 +86,23 @@
     </div>
   </form>
 
-  <script>
+  <script type="module">
+    import { requireAuth } from "./auth-guard.js";
+    import { loadTask, saveTask } from "./tasks-data.js";
+    import { app, db } from "./firebase-init.js";
+    import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging.js";
+    import {
+      collection,
+      addDoc,
+      serverTimestamp,
+      Timestamp
+    } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+    import { VAPID_KEY } from "./fcm-config.js";
+    import { saveFcmToken } from "./user-data.js";
+
     const form = document.getElementById('task-form');
     const params = new URLSearchParams(location.search);
     const editId = params.get('id');
-
-    function loadTasks() { return JSON.parse(localStorage.getItem('tasks') || '[]'); }
-    function saveTasks(tasks) { localStorage.setItem('tasks', JSON.stringify(tasks)); }
 
     const repeatSelect = document.getElementById('task-repeat');
     const customRepeat = document.getElementById('custom-repeat');
@@ -128,30 +141,80 @@
       }
     }
 
-    if (editId) {
-      const tasks = loadTasks();
-      const task = tasks.find(t => t.id === editId);
-      if (task) populateForm(task);
+    const messaging = getMessaging(app);
+    window.currentFcmToken = null;
+
+    async function saveReminderToFirestore(taskId, uid, title, remindAt, token) {
+      try {
+        const docRef = await addDoc(collection(db, "reminders"), {
+          taskId: taskId,
+          uid: uid,
+          title: title,
+          body: "リマインダー通知です",
+          remindAt: Timestamp.fromDate(new Date(remindAt)),
+          fcmToken: token,
+          notified: false,
+          createdAt: serverTimestamp()
+        });
+        console.log("Firestore保存成功:", docRef.id);
+      } catch (error) {
+        console.error("Firestore保存エラー:", error);
+      }
     }
 
-    document.getElementById('saveTaskButton').addEventListener('click', async () => {
+    async function requestNotificationPermission() {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          console.log("通知が許可されませんでした");
+          return;
+        }
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        if (token) {
+          console.log("FCMトークン:", token);
+          window.currentFcmToken = token;
+          if (currentUser) await saveFcmToken(currentUser.uid, token);
+        } else {
+          console.log("FCMトークンを取得できませんでした");
+        }
+      } catch (error) {
+        console.error("通知許可またはトークン取得でエラー:", error);
+      }
+    }
+
+    let currentUser = null;
+    let existingTask = null;
+
+    async function init() {
+      currentUser = await requireAuth();
+      requestNotificationPermission();
+
+      if (editId) {
+        existingTask = await loadTask(currentUser.uid, editId);
+        if (existingTask) populateForm(existingTask);
+      }
+
+      document.getElementById('saveTaskButton').addEventListener('click', onSave);
+    }
+
+    async function onSave() {
       const formData = new FormData(form);
+      const frequency = formData.get('frequency') || 'medium';
 
       const errors = [];
       if (!formData.get('name') || !formData.get('name').trim()) {
         errors.push('・タスク名を入力してください');
       }
-      if (!formData.get('notifyDate')) {
-        errors.push('・通知日付を入力してください');
-      }
-      if (!formData.get('time')) {
-        errors.push('・通知時刻を入力してください');
+      if (frequency === 'none') {
+        if (!formData.get('notifyDate')) {
+          errors.push('・通知日付を入力してください');
+        }
+        if (!formData.get('time')) {
+          errors.push('・通知時刻を入力してください');
+        }
       }
       if (!window.currentFcmToken) {
         errors.push('・通知が許可されていません。ブラウザの通知を許可してからもう一度お試しください');
-      }
-      if (!window.saveReminderToFirestore) {
-        errors.push('・通知サービスの読み込みに失敗しました。ページを再読み込みしてください');
       }
 
       if (errors.length > 0) {
@@ -159,8 +222,6 @@
         return;
       }
 
-      const tasks = loadTasks();
-      const existingTask = editId ? tasks.find(t => t.id === editId) : null;
       const repeatType = formData.get('repeatType');
       const repeat = repeatType === 'none' ? null : {
         type: repeatType,
@@ -168,7 +229,7 @@
       };
 
       const taskObj = {
-        id: editId || Date.now().toString(),
+        id: editId || null,
         name: formData.get('name'),
         title: formData.get('name'),
         description: formData.get('description'),
@@ -177,29 +238,26 @@
         notifyDate: formData.get('notifyDate'),
         enabled: document.getElementById('task-enable').checked,
         status: (existingTask && existingTask.status) || '未完了',
-        frequency: formData.get('frequency') || 'medium',
+        frequency: frequency,
         priority: formData.get('priority') || 'medium',
         notificationTypes: formData.getAll('notification-type'),
         dueDate: formData.get('dueDate') || null,
         repeat: repeat
       };
 
-      if (editId) {
-        const idx = tasks.findIndex(t => t.id === editId);
-        if (idx !== -1) tasks[idx] = taskObj;
-        else tasks.push(taskObj);
-      } else {
-        tasks.push(taskObj);
-      }
-      saveTasks(tasks);
+      const savedId = await saveTask(currentUser.uid, taskObj);
 
-      const remindAt = taskObj.notifyDate + "T" + taskObj.time + ":00+09:00";
-      console.log("Firestoreに保存開始:", taskObj.name, remindAt);
-      await window.saveReminderToFirestore(taskObj.name, remindAt, window.currentFcmToken);
+      if (frequency === 'none') {
+        const remindAt = taskObj.notifyDate + "T" + taskObj.time + ":00+09:00";
+        console.log("Firestoreに保存開始:", taskObj.name, remindAt);
+        await saveReminderToFirestore(savedId, currentUser.uid, taskObj.name, remindAt, window.currentFcmToken);
+      }
 
       alert('保存しました');
       location.href = 'task-list.html';
-    });
+    }
+
+    init();
   </script>
 
 <nav class="bottom-nav">
@@ -224,70 +282,5 @@
   </a>
 </nav>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
-    import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging.js";
-    import {
-      getFirestore,
-      collection,
-      addDoc,
-      serverTimestamp,
-      Timestamp
-    } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
-    import { VAPID_KEY } from "./fcm-config.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyCHf5uiktc7MJIQ2oWopYoMTYyfS7CwkIw",
-      authDomain: "reminder-project-4b576.firebaseapp.com",
-      projectId: "reminder-project-4b576",
-      storageBucket: "reminder-project-4b576.firebasestorage.app",
-      messagingSenderId: "590449260772",
-      appId: "1:590449260772:web:c3b859071d04abdcaf94f1",
-      measurementId: "G-2364V1ENYR"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const messaging = getMessaging(app);
-    const db = getFirestore(app);
-
-    window.currentFcmToken = null;
-
-    window.saveReminderToFirestore = async function(title, remindAt, token) {
-      try {
-        const docRef = await addDoc(collection(db, "reminders"), {
-          title: title,
-          body: "リマインダー通知です",
-          remindAt: Timestamp.fromDate(new Date(remindAt)),
-          fcmToken: token,
-          notified: false,
-          createdAt: serverTimestamp()
-        });
-        console.log("Firestore保存成功:", docRef.id);
-      } catch (error) {
-        console.error("Firestore保存エラー:", error);
-      }
-    };
-
-    async function requestNotificationPermission() {
-      try {
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") {
-          console.log("通知が許可されませんでした");
-          return;
-        }
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-        if (token) {
-          console.log("FCMトークン:", token);
-          window.currentFcmToken = token;
-        } else {
-          console.log("FCMトークンを取得できませんでした");
-        }
-      } catch (error) {
-        console.error("通知許可またはトークン取得でエラー:", error);
-      }
-    }
-
-    requestNotificationPermission();
-  </script>
 </body>
 </html>
