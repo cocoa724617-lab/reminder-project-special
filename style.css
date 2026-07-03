@@ -73,6 +73,11 @@ h2 {
   font-weight: bold;
 }
 
+.notification-status-blocked {
+  color: #ff6b6b;
+  font-weight: bold;
+}
+
 .user-info {
   display: flex;
   align-items: center;
