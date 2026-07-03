@@ -29,15 +29,9 @@
 
   <script type="module">
     import { auth, googleProvider } from "./firebase-init.js";
-    import { signInWithRedirect, getRedirectResult, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+    import { signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 
     const errorEl = document.getElementById('login-error');
-
-    getRedirectResult(auth).catch((error) => {
-      console.error("ログインエラー:", error);
-      errorEl.textContent = "ログインに失敗しました。もう一度お試しください。";
-      errorEl.style.display = 'block';
-    });
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -47,9 +41,15 @@
       document.documentElement.classList.remove('auth-checking');
     });
 
-    document.getElementById('google-login-button').addEventListener('click', () => {
+    document.getElementById('google-login-button').addEventListener('click', async () => {
       errorEl.style.display = 'none';
-      signInWithRedirect(auth, googleProvider);
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (error) {
+        console.error("ログインエラー:", error);
+        errorEl.textContent = "ログインに失敗しました。もう一度お試しください。";
+        errorEl.style.display = 'block';
+      }
     });
   </script>
 </body>
