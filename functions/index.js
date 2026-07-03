@@ -165,6 +165,8 @@ exports.sendReminderNotifications = onSchedule(
       console.log("remindAt:", remindAtDate.toISOString());
       console.log("fcmToken:", data.fcmToken ? "あり" : "なし");
 
+      let currentTask = null;
+
       if (data.uid && data.taskId) {
         const taskSnap = await db
           .collection("users")
@@ -178,6 +180,8 @@ exports.sendReminderNotifications = onSchedule(
           await doc.ref.delete();
           return;
         }
+
+        currentTask = taskSnap.data();
       }
 
       if (!data.fcmToken) {
@@ -185,9 +189,15 @@ exports.sendReminderNotifications = onSchedule(
         return;
       }
 
+      const notificationTitle =
+        currentTask?.title ||
+        currentTask?.name ||
+        data.title ||
+        "リマインダー";
+
       const message = {
         notification: {
-          title: data.title || "リマインダー",
+          title: notificationTitle,
           body: data.body || "リマインダーの時間です",
         },
         token: data.fcmToken,
