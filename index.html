@@ -22,6 +22,7 @@
 
       <h2>通知を確認した？</h2>
       <p>未完了のタスクがないか確認しよう</p>
+      <p id="ios-install-banner" style="display:none;">iPhoneで通知を受け取るには、共有ボタンから「ホーム画面に追加」し、追加後はホーム画面のアイコンから開いて通知を許可してください。</p>
 
       <a href="task-list.html" class="button-link">タスクを確認する</a>
     </section>
@@ -242,7 +243,16 @@
     import { saveFcmToken } from "./user-data.js";
     import { isPushSupported, isIosDevice, isStandaloneDisplayMode } from "./pwa-notifications.js";
 
+    function updateIosInstallBanner() {
+      const banner = document.getElementById('ios-install-banner');
+      if (banner && isIosDevice() && !isStandaloneDisplayMode()) {
+        banner.style.display = 'block';
+      }
+    }
+
     async function requestNotificationPermission() {
+      updateIosInstallBanner();
+
       if (!isPushSupported() || (isIosDevice() && !isStandaloneDisplayMode())) {
         console.log("この環境では通知に対応していません");
         return;
