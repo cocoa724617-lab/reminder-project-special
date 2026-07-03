@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>タスク登録 / 編集</title>
 <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
 <body class="task-form-page">
   <h1>タスクを登録 / 編集</h1>
@@ -99,6 +105,7 @@
     } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
     import { VAPID_KEY } from "./fcm-config.js";
     import { saveFcmToken } from "./user-data.js";
+    import { isPushSupported, isIosDevice, isStandaloneDisplayMode } from "./pwa-notifications.js";
 
     const form = document.getElementById('task-form');
     const params = new URLSearchParams(location.search);
@@ -141,7 +148,6 @@
       }
     }
 
-    const messaging = getMessaging(app);
     window.currentFcmToken = null;
 
     async function saveReminderToFirestore(taskId, uid, title, remindAt, token) {
@@ -163,12 +169,18 @@
     }
 
     async function requestNotificationPermission() {
+      if (!isPushSupported() || (isIosDevice() && !isStandaloneDisplayMode())) {
+        console.log("この環境では通知に対応していません");
+        return;
+      }
+
       try {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") {
           console.log("通知が許可されませんでした");
           return;
         }
+        const messaging = getMessaging(app);
         const token = await getToken(messaging, { vapidKey: VAPID_KEY });
         if (token) {
           console.log("FCMトークン:", token);

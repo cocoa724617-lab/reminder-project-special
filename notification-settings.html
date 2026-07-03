@@ -5,12 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>通知設定</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
 <body class="notification-settings-page">
   <h1>通知設定</h1>
 
   <section id="user-info" class="user-info"></section>
   <button id="logout-button" type="button" class="btn-secondary">ログアウト</button>
+
+  <section id="push-notification-section" class="card">
+    <h2>通知の利用状況</h2>
+    <p id="ios-install-banner" style="display:none;">iPhoneで通知を受け取るには、共有ボタンから「ホーム画面に追加」してください。</p>
+    <p id="unsupported-banner" style="display:none;">この環境では通知に対応していません。</p>
+    <div id="permission-section" style="display:none;">
+      <button id="request-permission-button" type="button" class="btn-secondary">通知を許可する</button>
+      <p id="permission-status"></p>
+    </div>
+  </section>
 
   <form id="settings-form">
     <!-- 通知の頻度はタスクごとに設定するため、この画面では削除しました -->
@@ -81,9 +97,58 @@
 
   <script type="module">
     import { requireAuth, logout } from "./auth-guard.js";
-    import { loadUserData, saveNotificationSettings } from "./user-data.js";
+    import { loadUserData, saveNotificationSettings, saveFcmToken } from "./user-data.js";
+    import { app } from "./firebase-init.js";
+    import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging.js";
+    import { VAPID_KEY } from "./fcm-config.js";
+    import { isPushSupported, isIosDevice, isStandaloneDisplayMode } from "./pwa-notifications.js";
 
     let currentUser = null;
+
+    function updatePermissionStatus() {
+      const statusEl = document.getElementById('permission-status');
+      if (Notification.permission === 'granted') {
+        statusEl.textContent = '通知が使える状態です。';
+      } else if (Notification.permission === 'denied') {
+        statusEl.textContent = '通知がブロックされています。端末の設定アプリから通知を許可してください。';
+      } else {
+        statusEl.textContent = '';
+      }
+    }
+
+    function initPushNotificationSection() {
+      const iosBanner = document.getElementById('ios-install-banner');
+      const unsupportedBanner = document.getElementById('unsupported-banner');
+      const permissionSection = document.getElementById('permission-section');
+
+      if (!isPushSupported()) {
+        unsupportedBanner.style.display = 'block';
+        return;
+      }
+
+      if (isIosDevice() && !isStandaloneDisplayMode()) {
+        iosBanner.style.display = 'block';
+        return;
+      }
+
+      permissionSection.style.display = 'block';
+      updatePermissionStatus();
+
+      document.getElementById('request-permission-button').addEventListener('click', async () => {
+        try {
+          const permission = await Notification.requestPermission();
+          updatePermissionStatus();
+
+          if (permission === 'granted') {
+            const messaging = getMessaging(app);
+            const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+            if (token) await saveFcmToken(currentUser.uid, token);
+          }
+        } catch (error) {
+          console.error("通知許可またはトークン取得でエラー:", error);
+        }
+      });
+    }
 
     function renderUserInfo(user) {
       const userInfo = document.getElementById('user-info');
@@ -150,6 +215,7 @@
     async function init() {
       currentUser = await requireAuth();
       renderUserInfo(currentUser);
+      initPushNotificationSection();
 
       const userData = await loadUserData(currentUser.uid);
       if (userData && userData.notificationSettings) {

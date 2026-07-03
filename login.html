@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ログイン</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
 
 <body class="home-page">
@@ -23,9 +29,15 @@
 
   <script type="module">
     import { auth, googleProvider } from "./firebase-init.js";
-    import { signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+    import { signInWithRedirect, getRedirectResult, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 
     const errorEl = document.getElementById('login-error');
+
+    getRedirectResult(auth).catch((error) => {
+      console.error("ログインエラー:", error);
+      errorEl.textContent = "ログインに失敗しました。もう一度お試しください。";
+      errorEl.style.display = 'block';
+    });
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -35,15 +47,9 @@
       document.documentElement.classList.remove('auth-checking');
     });
 
-    document.getElementById('google-login-button').addEventListener('click', async () => {
+    document.getElementById('google-login-button').addEventListener('click', () => {
       errorEl.style.display = 'none';
-      try {
-        await signInWithPopup(auth, googleProvider);
-      } catch (error) {
-        console.error("ログインエラー:", error);
-        errorEl.textContent = "ログインに失敗しました。もう一度お試しください。";
-        errorEl.style.display = 'block';
-      }
+      signInWithRedirect(auth, googleProvider);
     });
   </script>
 </body>

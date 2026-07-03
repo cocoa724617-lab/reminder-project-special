@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ランダム通知リマインダー</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
 
 <body class="home-page">
@@ -234,11 +240,16 @@
     import { VAPID_KEY } from "./fcm-config.js";
     import { requireAuth } from "./auth-guard.js";
     import { saveFcmToken } from "./user-data.js";
-
-    const messaging = getMessaging(app);
+    import { isPushSupported, isIosDevice, isStandaloneDisplayMode } from "./pwa-notifications.js";
 
     async function requestNotificationPermission() {
+      if (!isPushSupported() || (isIosDevice() && !isStandaloneDisplayMode())) {
+        console.log("この環境では通知に対応していません");
+        return;
+      }
+
       try {
+        const messaging = getMessaging(app);
         const permission = await Notification.requestPermission();
 
         if (permission !== "granted") {
