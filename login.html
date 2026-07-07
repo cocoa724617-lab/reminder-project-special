@@ -2,11 +2,11 @@
 <html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>ログイン</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#ffffff">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -20,18 +20,81 @@
     <section class="notification-card">
       <div class="notification-icon">🔔</div>
       <h2>ログインしてはじめる</h2>
-      <p>Googleアカウントでログインしてください</p>
+      <p>Googleアカウント、またはメールアドレスでログインしてください</p>
 
       <button id="google-login-button" type="button">Googleでログイン</button>
+
+      <p class="login-divider-text">または</p>
+
+      <form id="email-login-form">
+        <input id="email-input" type="email" placeholder="メールアドレス" autocomplete="email" required>
+        <input id="password-input" type="password" placeholder="パスワード（6文字以上）" autocomplete="current-password" minlength="6" required>
+        <button id="email-submit-button" type="submit">ログイン</button>
+      </form>
+
+      <div class="login-links-row">
+        <button type="button" id="toggle-mode-button" class="link-button">新規登録はこちら</button>
+        <button type="button" id="forgot-password-button" class="link-button">パスワードを忘れた場合</button>
+      </div>
+
       <p id="login-error" class="login-error" style="display:none;"></p>
+      <p id="login-info" class="login-info" style="display:none;"></p>
     </section>
   </main>
 
   <script type="module">
     import { auth, googleProvider } from "./firebase-init.js";
-    import { signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+    import {
+      signInWithPopup,
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      sendPasswordResetEmail
+    } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 
     const errorEl = document.getElementById('login-error');
+    const infoEl = document.getElementById('login-info');
+    const emailForm = document.getElementById('email-login-form');
+    const emailInput = document.getElementById('email-input');
+    const passwordInput = document.getElementById('password-input');
+    const submitButton = document.getElementById('email-submit-button');
+    const toggleModeButton = document.getElementById('toggle-mode-button');
+    const forgotPasswordButton = document.getElementById('forgot-password-button');
+
+    let isSignUpMode = false;
+
+    function updateModeUI() {
+      submitButton.textContent = isSignUpMode ? '登録する' : 'ログイン';
+      toggleModeButton.textContent = isSignUpMode ? 'ログインはこちら' : '新規登録はこちら';
+    }
+
+    function showError(message) {
+      infoEl.style.display = 'none';
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+    }
+
+    function showInfo(message) {
+      errorEl.style.display = 'none';
+      infoEl.textContent = message;
+      infoEl.style.display = 'block';
+    }
+
+    function hideMessages() {
+      errorEl.style.display = 'none';
+      infoEl.style.display = 'none';
+    }
+
+    function translateAuthError(error) {
+      const code = error && error.code;
+      if (code === 'auth/invalid-email') return 'メールアドレスの形式が正しくありません。';
+      if (code === 'auth/user-not-found') return 'このメールアドレスのアカウントが見つかりません。';
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'メールアドレスまたはパスワードが正しくありません。';
+      if (code === 'auth/email-already-in-use') return 'このメールアドレスは既に登録されています。ログインをお試しください。';
+      if (code === 'auth/weak-password') return 'パスワードは6文字以上で設定してください。';
+      if (code === 'auth/too-many-requests') return '試行回数が多すぎます。しばらくしてからもう一度お試しください。';
+      return 'エラーが発生しました。もう一度お試しください。';
+    }
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -42,15 +105,57 @@
     });
 
     document.getElementById('google-login-button').addEventListener('click', async () => {
-      errorEl.style.display = 'none';
+      hideMessages();
       try {
         await signInWithPopup(auth, googleProvider);
       } catch (error) {
         console.error("ログインエラー:", error);
-        errorEl.textContent = "ログインに失敗しました。もう一度お試しください。";
-        errorEl.style.display = 'block';
+        showError("ログインに失敗しました。もう一度お試しください。");
       }
     });
+
+    toggleModeButton.addEventListener('click', () => {
+      isSignUpMode = !isSignUpMode;
+      hideMessages();
+      updateModeUI();
+    });
+
+    emailForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      hideMessages();
+
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+
+      try {
+        if (isSignUpMode) {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+          await signInWithEmailAndPassword(auth, email, password);
+        }
+      } catch (error) {
+        console.error("メールログインエラー:", error);
+        showError(translateAuthError(error));
+      }
+    });
+
+    forgotPasswordButton.addEventListener('click', async () => {
+      hideMessages();
+      const email = emailInput.value.trim();
+      if (!email) {
+        showError('パスワード再設定メールを送るメールアドレスを入力してください。');
+        return;
+      }
+      try {
+        await sendPasswordResetEmail(auth, email);
+        showInfo('パスワード再設定用のメールを送信しました。');
+      } catch (error) {
+        console.error("パスワード再設定エラー:", error);
+        showError(translateAuthError(error));
+      }
+    });
+
+    updateModeUI();
   </script>
 </body>
 </html>

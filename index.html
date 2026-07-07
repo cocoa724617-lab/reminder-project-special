@@ -2,31 +2,61 @@
 <html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>ランダム通知リマインダー</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#ffffff">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
 
-<body class="home-page">
-  <h1>ランダム通知リマインダー</h1>
+<body class="has-fixed-header">
+  <div id="nav-drawer-backdrop" class="nav-drawer-backdrop"></div>
+  <nav id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-header">
+      <span class="nav-drawer-title">メニュー</span>
+    </div>
+    <ul class="nav-drawer-list">
+      <li><a href="completed-tasks.html">完了済みタスク</a></li>
+      <li><a href="stats.html">実績・記録</a></li>
+      <li><a href="#" id="logout-link" class="is-logout">ログアウト</a></li>
+    </ul>
+  </nav>
 
-  <main class="home-main">
-    <section class="notification-card">
-      <div class="notification-icon">🔔</div>
+  <header class="top-bar">
+    <button id="hamburger-button" class="hamburger-button" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <h1>ホーム</h1>
+  </header>
 
-      <h2>通知を確認した？</h2>
-      <p>未完了のタスクがないか確認しよう</p>
-      <p id="ios-install-banner" style="display:none;">iPhoneで通知を受け取るには、共有ボタンから「ホーム画面に追加」し、追加後はホーム画面のアイコンから開いて通知を許可してください。</p>
+  <div id="ios-install-banner" class="ios-banner-card" style="display:none;">
+    <span class="ios-banner-icon" aria-hidden="true">📲</span>
+    <p>iPhoneで通知を受け取るには、共有ボタンから「ホーム画面に追加」し、追加後はホーム画面のアイコンから開いて通知を許可してください。</p>
+  </div>
 
-      <a href="task-list.html" class="button-link">タスクを確認する</a>
+  <section id="home-screen" class="home-screen">
+    <section class="home-section" id="next-task-section" style="display:none;">
+      <h2 class="home-section-title">次にやるタスク</h2>
+      <div id="next-task-card"></div>
     </section>
-  </main>
+
+    <section class="home-section">
+      <h2 class="home-section-title">今日やるべきタスク</h2>
+      <div id="today-task-list"></div>
+    </section>
+
+    <section class="home-section">
+      <h2 class="home-section-title">成果の確認</h2>
+      <div id="home-stats-card" class="home-stats-card"></div>
+      <a href="stats.html" class="home-stats-link">実績をもっと見る ›</a>
+    </section>
+  </section>
+
+  <a href="task-form.html" class="fab-button" aria-label="タスクを追加">+</a>
 
   <div id="popup-notification" class="popup-notification-overlay" aria-hidden="true">
     <section class="popup-notification" role="dialog" aria-modal="true" aria-labelledby="popup-notification-title">
@@ -40,14 +70,9 @@
   </div>
 
   <nav class="bottom-nav">
-    <a href="index.html">
+    <a href="index.html" class="is-active">
       <span class="icon">🏠</span>
       <span>Home</span>
-    </a>
-
-    <a href="task-form.html">
-      <span class="icon">➕</span>
-      <span>Add</span>
     </a>
 
     <a href="task-list.html">
@@ -55,25 +80,63 @@
       <span>List</span>
     </a>
 
+    <a href="atodeyaru.html">
+      <span class="icon">🕒</span>
+      <span>あとで</span>
+    </a>
+
     <a href="notification-settings.html">
       <span class="icon">⚙️</span>
       <span>Setting</span>
     </a>
   </nav>
+
   <script type="module">
     import { requireAuth } from "./auth-guard.js";
-    import { loadTasks } from "./tasks-data.js";
+    import { initNavDrawer } from "./nav-drawer.js";
+    import { loadTasks, loadCompletedTasks, completeTask as completeTaskInFirestore } from "./tasks-data.js";
+    import { getTaskLabel, applyLabelBar, setCustomLabelNames, normalizeImportance, IMPORTANCE_LABELS, normalizeUrgency, URGENCY_LABELS, REPEAT_LABELS, isRepeatingTask } from "./task-labels.js";
+    import { loadUserData } from "./user-data.js";
+    import { computeCompletionStats } from "./stats.js";
+    import { celebrateCompletion } from "./celebrate.js";
 
     let currentUser = null;
+    let tasks = [];
 
-    async function loadPopupTasks() {
-      if (!currentUser) return [];
-      try {
-        return await loadTasks(currentUser.uid);
-      } catch (error) {
-        console.error("タスク取得エラー:", error);
-        return [];
+    const todayTaskListEl = document.getElementById('today-task-list');
+    const nextTaskSection = document.getElementById('next-task-section');
+    const nextTaskCardEl = document.getElementById('next-task-card');
+    const homeStatsCardEl = document.getElementById('home-stats-card');
+
+    function isLaterTask(task) {
+      const status = String(task.status || '').trim().toLowerCase();
+      return status === '後でやる' || status === 'later' || status.includes('後で');
+    }
+
+    function isDoneTask(task) {
+      return String(task.status || '').trim() === '完了';
+    }
+
+    function getReminderLabel(task) {
+      if (task.notifyDate) {
+        return `通知日時：${task.notifyDate}${task.time ? ' ' + task.time : ''}`;
       }
+      if (task.frequency && task.frequency !== 'none') {
+        if (task.frequencyCount) {
+          const unitLabel = task.frequencyUnit === 'week' ? '1週間' : '1日';
+          return `${unitLabel}に${task.frequencyCount}回くらいランダム通知`;
+        }
+        const freqLabel = {
+          small: '少なめ（1〜2回/日）',
+          medium: '普通（3〜4回/日）',
+          large: '多め（5〜7回/日）'
+        }[task.frequency] || task.frequency;
+        return `ランダム通知・${freqLabel}`;
+      }
+      if (task.dueDate || task.date) {
+        return `期限：${task.dueDate || task.date}`;
+      }
+      return '日時未設定';
     }
 
     function getLocalTodayString() {
@@ -97,53 +160,159 @@
       return task.title || task.name || '無題のタスク';
     }
 
+    function isTodayTask(task) {
+      // urgency未設定の既存タスクを一律「今日やる」扱いにしないよう、明示的にtodayが設定されている場合だけ加味する
+      return normalizeDateValue(getTaskDueDate(task)) === getLocalTodayString()
+        || task.urgency === 'today';
+    }
+
+    function isActiveTask(task) {
+      return !isDoneTask(task) && !isLaterTask(task);
+    }
+
+    const IMPORTANCE_RANK = { high: 0, medium: 1, low: 2 };
+
+    function pickNextTask(activeTasks) {
+      const todaysActive = activeTasks.filter(isTodayTask);
+      const pool = todaysActive.length > 0 ? todaysActive : activeTasks;
+
+      return pool.slice().sort((a, b) => {
+        const rankA = IMPORTANCE_RANK[normalizeImportance(a.priority || a.importance)];
+        const rankB = IMPORTANCE_RANK[normalizeImportance(b.priority || b.importance)];
+        if (rankA !== rankB) return rankA - rankB;
+
+        const dueA = getTaskDueDate(a) || '9999-99-99';
+        const dueB = getTaskDueDate(b) || '9999-99-99';
+        return dueA.localeCompare(dueB);
+      })[0] || null;
+    }
+
+    function buildMetaPills(task) {
+      const importance = normalizeImportance(task.priority || task.importance || task.priorityLevel);
+      const urgency = normalizeUrgency(task.urgency);
+      const labelMeta = getTaskLabel(task.color);
+      const pills = [`<span class="meta-pill meta-pill-importance-${importance}">重要度：${IMPORTANCE_LABELS[importance]}</span>`];
+      pills.push(`<span class="meta-pill">予定：${URGENCY_LABELS[urgency]}</span>`);
+      if (task.color && task.color !== 'none') {
+        pills.push(`<span class="meta-pill meta-pill-label" style="--label-color:${labelMeta.color}">${labelMeta.name}</span>`);
+      }
+      if (isRepeatingTask(task)) {
+        pills.push(`<span class="meta-pill">🔁 ${REPEAT_LABELS[task.repeat] || task.repeat}</span>`);
+      }
+      return `<div class="meta-pill-row">${pills.join('')}</div>`;
+    }
+
+    function renderTodayTasks(activeTasks, nextTask) {
+      const todaysActive = activeTasks.filter(isTodayTask).filter((task) => !nextTask || task.id !== nextTask.id);
+
+      todayTaskListEl.innerHTML = '';
+
+      if (todaysActive.length === 0) {
+        todayTaskListEl.innerHTML = '<p class="task-list-empty">今日やるべきタスクはありません。のんびりいきましょう。</p>';
+        return;
+      }
+
+      todaysActive.forEach((task) => {
+        const card = document.createElement('div');
+        card.className = 'task-card task-card-compact';
+        applyLabelBar(card, task.color);
+
+        card.innerHTML = `
+          <input type="checkbox" class="task-checkbox" id="complete-${task.id}" aria-label="完了にする">
+          <div class="task-info">
+            <h3>${getTaskTitle(task)}</h3>
+            <p class="task-remind">${getReminderLabel(task)}</p>
+            ${buildMetaPills(task)}
+          </div>
+          <a href="atodeyaru.html?id=${task.id}" class="home-later-link">あとで</a>
+        `;
+
+        todayTaskListEl.appendChild(card);
+        card.querySelector(`#complete-${task.id}`).addEventListener('change', (event) => {
+          handleComplete(task, event.target);
+        });
+      });
+    }
+
+    function renderNextTask(nextTask) {
+      if (!nextTask) {
+        nextTaskSection.style.display = 'none';
+        return;
+      }
+
+      nextTaskSection.style.display = '';
+      nextTaskCardEl.innerHTML = `
+        <div class="task-card next-task-card">
+          <div class="task-info">
+            <h3>${getTaskTitle(nextTask)}</h3>
+            <p class="task-remind">${getReminderLabel(nextTask)}</p>
+            ${buildMetaPills(nextTask)}
+          </div>
+          <div class="task-actions">
+            <button id="next-task-complete">完了</button>
+            <a href="atodeyaru.html?id=${nextTask.id}" class="button-link btn-secondary home-later-button">あとでやる</a>
+          </div>
+        </div>
+      `;
+      applyLabelBar(nextTaskCardEl.querySelector('.next-task-card'), nextTask.color);
+
+      document.getElementById('next-task-complete').addEventListener('click', (event) => {
+        handleComplete(nextTask, null, event.target);
+      });
+    }
+
+    async function handleComplete(task, checkbox, triggerButton) {
+      if (!confirm('このタスクを完了にしますか？')) {
+        if (checkbox) checkbox.checked = false;
+        return;
+      }
+      await completeTaskInFirestore(currentUser.uid, task);
+      tasks = tasks.filter((t) => t.id !== task.id);
+      celebrateCompletion();
+      render();
+    }
+
+    async function renderHomeStats() {
+      const completedTasks = await loadCompletedTasks(currentUser.uid);
+      const stats = computeCompletionStats(completedTasks);
+
+      homeStatsCardEl.innerHTML = `
+        <div class="stat-tile">
+          <span class="stat-tile-value">${stats.todayCount}</span>
+          <span class="stat-tile-label">今日の完了</span>
+        </div>
+        <div class="stat-tile">
+          <span class="stat-tile-value">${stats.weekCount}</span>
+          <span class="stat-tile-label">今週の完了</span>
+        </div>
+        <div class="stat-tile stat-tile-accent">
+          <span class="stat-tile-value">${stats.fromLaterCount}</span>
+          <span class="stat-tile-label">あとでから完了</span>
+        </div>
+      `;
+    }
+
+    function render() {
+      const activeTasks = tasks.filter(isActiveTask);
+      const nextTask = pickNextTask(activeTasks);
+      renderNextTask(nextTask);
+      renderTodayTasks(activeTasks, nextTask);
+    }
+
+    async function loadPopupTasks() {
+      return tasks;
+    }
+
     function getTaskPriority(task) {
       return task.priority || task.importance || task.priorityLevel || '-';
     }
 
     function formatPopupPriority(priority) {
-      const value = String(priority || '').trim().toLowerCase();
-
-      if (value === 'high' || value === '高' || value.includes('高') || value.includes('鬮')) return '高';
-      if (value === 'low' || value === '低' || value.includes('低') || value.includes('菴')) return '低';
-      if (value === 'medium' || value === '中' || value.includes('中') || value.includes('荳')) return '中';
-      return priority || '-';
-    }
-
-    function isTodayTask(task) {
-      return normalizeDateValue(getTaskDueDate(task)) === getLocalTodayString();
+      return IMPORTANCE_LABELS[normalizeImportance(priority)];
     }
 
     function isImportantTask(task) {
-      const priority = String(getTaskPriority(task)).trim().toLowerCase();
-      return priority === 'high' || priority === '高' || priority.includes('高') || priority.includes('鬮');
-    }
-
-    function isLaterTask(task) {
-      const status = String(task.status || '').trim().toLowerCase();
-      return task.later === true ||
-        task.doLater === true ||
-        task.isLater === true ||
-        task.remindLater === true ||
-        task.laterTask === true ||
-        task.snoozed === true ||
-        task.postponed === true ||
-        status === '後でやる' ||
-        status === 'later' ||
-        status.includes('後で') ||
-        status.includes('蠕後〒');
-    }
-
-    function getTodayTasks(tasks) {
-      return (tasks || loadPopupTasks()).filter(isTodayTask);
-    }
-
-    function getImportantTasks(tasks) {
-      return (tasks || loadPopupTasks()).filter(isImportantTask);
-    }
-
-    function getLaterTasks(tasks) {
-      return (tasks || loadPopupTasks()).filter(isLaterTask);
+      return normalizeImportance(getTaskPriority(task)) === 'high';
     }
 
     function getPopupNotificationReasons(task) {
@@ -157,8 +326,8 @@
     }
 
     async function checkPopupNotifications() {
-      const tasks = await loadPopupTasks();
-      const notificationTasks = tasks
+      const currentTasks = await loadPopupTasks();
+      const notificationTasks = currentTasks
         .map(function(task) {
           return Object.assign({}, task, {
             notificationReasons: getPopupNotificationReasons(task)
@@ -173,7 +342,7 @@
       }
     }
 
-    function showPopupNotifications(tasks) {
+    function showPopupNotifications(popupTasks) {
       const popup = document.getElementById('popup-notification');
       const list = document.getElementById('popup-notification-list');
 
@@ -181,7 +350,7 @@
 
       list.innerHTML = '';
 
-      tasks.forEach(function(task) {
+      popupTasks.forEach(function(task) {
         const item = document.createElement('article');
         item.className = 'popup-task-item';
 
@@ -220,14 +389,13 @@
 
     async function init() {
       currentUser = await requireAuth();
+      initNavDrawer();
+      const userData = await loadUserData(currentUser.uid);
+      setCustomLabelNames(userData && userData.labelNames);
+      tasks = await loadTasks(currentUser.uid);
+      render();
+      renderHomeStats();
       checkPopupNotifications();
-
-      const showButton = document.querySelector('.notification-card .button-link');
-      if (showButton) {
-        showButton.addEventListener('click', function() {
-          checkPopupNotifications();
-        });
-      }
     }
 
     init();
@@ -246,7 +414,7 @@
     function updateIosInstallBanner() {
       const banner = document.getElementById('ios-install-banner');
       if (banner && isIosDevice() && !isStandaloneDisplayMode()) {
-        banner.style.display = 'block';
+        banner.style.display = 'flex';
       }
     }
 
@@ -259,7 +427,6 @@
       }
 
       try {
-        const messaging = getMessaging(app);
         const permission = await Notification.requestPermission();
 
         if (permission !== "granted") {
@@ -267,8 +434,12 @@
           return;
         }
 
+        const swRegistration = await navigator.serviceWorker.register("firebase-messaging-sw.js");
+        await navigator.serviceWorker.ready;
+        const messaging = getMessaging(app);
         const token = await getToken(messaging, {
-          vapidKey: VAPID_KEY
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: swRegistration
         });
 
         if (token) {

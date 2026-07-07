@@ -16,10 +16,32 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log("バックグラウンドメッセージ受信:", payload);
 
-  const notificationTitle = payload.notification?.title || "リマインダー";
+  const notificationTitle = payload.data?.title || "リマインダー";
   const notificationOptions = {
-    body: payload.notification?.body || "通知があります"
+    body: payload.data?.body || "通知があります"
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl = new URL("task-list.html", self.location.origin).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.startsWith(self.location.origin) && "focus" in client) {
+          if ("navigate" in client) {
+            client.navigate(targetUrl).catch(() => {});
+          }
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
 });

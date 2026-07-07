@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja" class="auth-checking">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>完了済みタスク</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="リマインダー">
+</head>
+<body class="completed-tasks-page has-fixed-header">
+  <div id="nav-drawer-backdrop" class="nav-drawer-backdrop"></div>
+  <nav id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-header">
+      <span class="nav-drawer-title">メニュー</span>
+    </div>
+    <ul class="nav-drawer-list">
+      <li><a href="completed-tasks.html">完了済みタスク</a></li>
+      <li><a href="stats.html">実績・記録</a></li>
+      <li><a href="#" id="logout-link" class="is-logout">ログアウト</a></li>
+    </ul>
+  </nav>
+
+  <header class="top-bar">
+    <button id="hamburger-button" class="hamburger-button" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <h1>完了済みタスク</h1>
+  </header>
+
+  <section id="completed-tasks-screen">
+    <div class="filter-bar">
+      <select id="label-filter" aria-label="ラベルで絞り込む"></select>
+      <select id="period-filter" aria-label="期間で絞り込む">
+        <option value="all" selected>すべての期間</option>
+        <option value="today">今日</option>
+        <option value="week">今週</option>
+        <option value="month">今月</option>
+      </select>
+    </div>
+
+    <div id="completed-task-list"></div>
+  </section>
+
+  <nav class="bottom-nav">
+    <a href="index.html">
+      <span class="icon">🏠</span>
+      <span>Home</span>
+    </a>
+
+    <a href="task-list.html">
+      <span class="icon">📋</span>
+      <span>List</span>
+    </a>
+
+    <a href="atodeyaru.html">
+      <span class="icon">🕒</span>
+      <span>あとで</span>
+    </a>
+
+    <a href="notification-settings.html">
+      <span class="icon">⚙️</span>
+      <span>Setting</span>
+    </a>
+  </nav>
+
+  <script type="module">
+    import { requireAuth } from "./auth-guard.js";
+    import { initNavDrawer } from "./nav-drawer.js";
+    import { loadCompletedTasks } from "./tasks-data.js";
+    import { TASK_LABELS, getTaskLabel, applyLabelBar, setCustomLabelNames } from "./task-labels.js";
+    import { loadUserData } from "./user-data.js";
+
+    let currentUser = null;
+    let completedTasks = [];
+
+    function toDate(value) {
+      if (!value) return null;
+      if (typeof value.toDate === 'function') return value.toDate();
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function formatDate(value) {
+      const date = toDate(value);
+      if (!date) return '完了日不明';
+      return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+    }
+
+    function getTaskTitle(task) {
+      return task.title || task.name || '無題のタスク';
+    }
+
+    function isSameDay(a, b) {
+      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+
+    function startOfWeek(date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - d.getDay());
+      return d;
+    }
+
+    function matchesPeriod(task, period) {
+      if (period === 'all') return true;
+      const completedAt = toDate(task.deletedAt);
+      if (!completedAt) return false;
+
+      const now = new Date();
+      if (period === 'today') return isSameDay(completedAt, now);
+      if (period === 'week') return completedAt >= startOfWeek(now);
+      if (period === 'month') return completedAt.getFullYear() === now.getFullYear() && completedAt.getMonth() === now.getMonth();
+      return true;
+    }
+
+    function populateLabelFilter() {
+      const select = document.getElementById('label-filter');
+      select.innerHTML = '<option value="all">すべてのラベル</option>';
+      Object.keys(TASK_LABELS).forEach((key) => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = getTaskLabel(key).name;
+        select.appendChild(option);
+      });
+    }
+
+    function render() {
+      const labelFilter = document.getElementById('label-filter').value;
+      const periodFilter = document.getElementById('period-filter').value;
+      const listEl = document.getElementById('completed-task-list');
+
+      const filtered = completedTasks
+        .filter((task) => labelFilter === 'all' || (task.color || 'none') === labelFilter)
+        .filter((task) => matchesPeriod(task, periodFilter))
+        .sort((a, b) => {
+          const dateA = toDate(a.deletedAt);
+          const dateB = toDate(b.deletedAt);
+          if (!dateA || !dateB) return 0;
+          return dateB - dateA;
+        });
+
+      listEl.innerHTML = '';
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<p class="task-list-empty">条件に合う完了済みタスクはありません。</p>';
+        return;
+      }
+
+      filtered.forEach((task) => {
+        const card = document.createElement('div');
+        card.className = 'task-card task-card-compact';
+        applyLabelBar(card, task.color);
+
+        const labelMeta = getTaskLabel(task.color);
+        const memo = task.memo || task.description || '';
+
+        card.innerHTML = `
+          <div class="task-info">
+            <h3>${getTaskTitle(task)}</h3>
+            <p class="task-remind">完了日：${formatDate(task.deletedAt)}</p>
+            ${task.color && task.color !== 'none' ? `<span class="meta-pill meta-pill-label" style="--label-color:${labelMeta.color}">${labelMeta.name}</span>` : ''}
+            ${memo ? `<p class="task-memo">${memo}</p>` : ''}
+            ${(task.laterCount || 0) > 0 ? `<p class="task-memo">あとでやるから完了（${task.laterCount}回後回し）</p>` : ''}
+          </div>
+        `;
+
+        listEl.appendChild(card);
+      });
+    }
+
+    async function init() {
+      currentUser = await requireAuth();
+      initNavDrawer();
+      const userData = await loadUserData(currentUser.uid);
+      setCustomLabelNames(userData && userData.labelNames);
+      populateLabelFilter();
+
+      completedTasks = await loadCompletedTasks(currentUser.uid);
+      render();
+
+      document.getElementById('label-filter').addEventListener('change', render);
+      document.getElementById('period-filter').addEventListener('change', render);
+    }
+
+    init();
+  </script>
+</body>
+</html>

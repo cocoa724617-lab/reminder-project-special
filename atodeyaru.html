@@ -2,19 +2,45 @@
 <html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>あとでやる</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#ffffff">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
-<body class="atodeyaru-page">
-  <main class="atodeyaru-main">
+<body class="atodeyaru-page has-fixed-header">
+  <div id="nav-drawer-backdrop" class="nav-drawer-backdrop"></div>
+  <nav id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-header">
+      <span class="nav-drawer-title">メニュー</span>
+    </div>
+    <ul class="nav-drawer-list">
+      <li><a href="completed-tasks.html">完了済みタスク</a></li>
+      <li><a href="stats.html">実績・記録</a></li>
+      <li><a href="#" id="logout-link" class="is-logout">ログアウト</a></li>
+    </ul>
+  </nav>
+
+  <header class="top-bar">
+    <button id="hamburger-button" class="hamburger-button" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <h1>あとでやる</h1>
+  </header>
+
+  <!-- 一覧モード：あとでやるにしたタスクをまとめて確認 -->
+  <section id="later-list-screen" style="display:none;">
+    <div id="later-task-list"></div>
+  </section>
+
+  <!-- 個別モード：?id= 付きで開いた時に、いつやるか選ぶ画面 -->
+  <main id="later-postpone-screen" class="atodeyaru-main" style="display:none;">
     <section class="atodeyaru-content" aria-labelledby="later-message">
+      <p id="later-task-title" class="atodeyaru-task-title"></p>
       <h1 id="later-message" class="atodeyaru-message"></h1>
       <p class="atodeyaru-question">いつやるの？</p>
 
@@ -28,32 +54,51 @@
     </section>
   </main>
 
+  <!-- 後回し回数が多いタスクを本当に後回しにする前の確認 -->
+  <div id="postpone-limit-modal" class="mini-modal-overlay" aria-hidden="true">
+    <div class="mini-modal-card">
+      <div class="mini-modal-header">
+        <h2>ちょっと待って</h2>
+      </div>
+      <p id="postpone-limit-text"></p>
+      <button type="button" id="postponeDoNowButton">今やる</button>
+      <button type="button" id="postponeEditDueButton" class="btn-secondary">期限を変更する</button>
+      <button type="button" id="postponeConfirmButton" class="btn-secondary">本当に後でやる</button>
+    </div>
+  </div>
+
   <nav class="bottom-nav">
     <a href="index.html">
-      <span class="icon">H</span>
+      <span class="icon">🏠</span>
       <span>Home</span>
     </a>
 
-    <a href="task-form.html">
-      <span class="icon">+</span>
-      <span>Add</span>
-    </a>
-
     <a href="task-list.html">
-      <span class="icon">L</span>
+      <span class="icon">📋</span>
       <span>List</span>
     </a>
 
+    <a href="atodeyaru.html" class="is-active">
+      <span class="icon">🕒</span>
+      <span>あとで</span>
+    </a>
+
     <a href="notification-settings.html">
-      <span class="icon">S</span>
+      <span class="icon">⚙️</span>
       <span>Setting</span>
     </a>
   </nav>
 
   <script type="module">
     import { requireAuth } from "./auth-guard.js";
-    import { delayTaskWithLaterTime } from "./tasks-data.js";
+    import { initNavDrawer } from "./nav-drawer.js";
+    import { loadTask, loadTasks, setTaskStatus, delayTaskWithLaterTime, completeTask as completeTaskInFirestore } from "./tasks-data.js";
+    import { loadUserData } from "./user-data.js";
+    import { applyLabelBar } from "./task-labels.js";
+    import { pickPostponeMessage } from "./postpone-messages.js";
+    import { celebrateCompletion } from "./celebrate.js";
 
+<<<<<<< HEAD
     const laterMessages = [
       'いつやるの？今でしょ',
       'そんなんだからダメなんだよ',
@@ -63,15 +108,105 @@
       'やる気が出ないのは、やる気がないからだよ',
       '逃げんなよ、やれよ'
     ];
+=======
+    const POSTPONE_LIMIT = 3;
+>>>>>>> c9c8a73 (Update reminder app notification and stats features)
 
     const params = new URLSearchParams(location.search);
     const taskId = params.get('id');
     let currentUser = null;
 
-    function showRandomLaterMessage() {
-      const messageElement = document.getElementById('later-message');
-      const randomIndex = Math.floor(Math.random() * laterMessages.length);
-      messageElement.textContent = laterMessages[randomIndex];
+    function toDate(value) {
+      if (!value) return null;
+      if (typeof value.toDate === 'function') return value.toDate();
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function formatDate(value) {
+      const date = toDate(value);
+      if (!date) return '記録なし';
+      return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+    }
+
+    function getTaskTitle(task) {
+      return task.title || task.name || '無題のタスク';
+    }
+
+    // ===== 一覧モード =====
+    async function initListMode() {
+      document.getElementById('later-list-screen').style.display = '';
+
+      const listEl = document.getElementById('later-task-list');
+      const tasks = await loadTasks(currentUser.uid);
+      const laterTasks = tasks.filter((task) => String(task.status || '').trim() === '後でやる');
+
+      if (laterTasks.length === 0) {
+        listEl.innerHTML = '<p class="task-list-empty">今「あとでやる」に入っているタスクはありません。</p>';
+        return;
+      }
+
+      listEl.innerHTML = '';
+
+      laterTasks.forEach((task) => {
+        const card = document.createElement('div');
+        card.className = 'task-card';
+        applyLabelBar(card, task.color);
+
+        card.innerHTML = `
+          <div class="task-info">
+            <h3>${getTaskTitle(task)}</h3>
+            <p>後でやるにした回数：${task.laterCount || 0}回</p>
+            <p>最後に後回しにした日：${formatDate(task.lastPostponedAt)}</p>
+          </div>
+          <div class="task-actions">
+            <button class="later-complete-button">完了</button>
+            <button class="later-edit-button">編集</button>
+          </div>
+        `;
+
+        card.querySelector('.later-complete-button').addEventListener('click', async () => {
+          if (!confirm('このタスクを完了にしますか？')) return;
+          await completeTaskInFirestore(currentUser.uid, task);
+          celebrateCompletion();
+          card.remove();
+        });
+
+        card.querySelector('.later-edit-button').addEventListener('click', () => {
+          location.href = `task-form.html?id=${task.id}`;
+        });
+
+        listEl.appendChild(card);
+      });
+    }
+
+    // ===== 個別モード（いつやるか選ぶ） =====
+    let currentTask = null;
+    let messageType = 'normal';
+    let pendingLaterTime = null;
+
+    function showLaterMessage() {
+      document.getElementById('later-message').textContent = pickPostponeMessage(messageType);
+    }
+
+    function openPostponeLimitModal(laterTime) {
+      pendingLaterTime = laterTime;
+      document.getElementById('postpone-limit-text').textContent =
+        `このタスクはすでに${currentTask.laterCount || 0}回後回しにしています。どうしますか？`;
+      const modal = document.getElementById('postpone-limit-modal');
+      modal.classList.add('is-visible');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closePostponeLimitModal() {
+      const modal = document.getElementById('postpone-limit-modal');
+      modal.classList.remove('is-visible');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    async function commitPostpone(laterTime) {
+      await delayTaskWithLaterTime(currentUser.uid, taskId, laterTime);
+      location.href = 'task-list.html';
     }
 
     async function selectLaterTime(button) {
@@ -84,18 +219,44 @@
       button.setAttribute('aria-pressed', 'true');
       const laterTime = button.dataset.value;
 
-      if (!taskId) {
+      if ((currentTask.laterCount || 0) >= POSTPONE_LIMIT) {
+        openPostponeLimitModal(laterTime);
+        return;
+      }
+
+      await commitPostpone(laterTime);
+    }
+
+    function initPostponeLimitButtons() {
+      document.getElementById('postponeDoNowButton').addEventListener('click', async () => {
+        await setTaskStatus(currentUser.uid, taskId, '未完了');
+        location.href = 'task-list.html';
+      });
+
+      document.getElementById('postponeEditDueButton').addEventListener('click', () => {
+        location.href = `task-form.html?id=${taskId}`;
+      });
+
+      document.getElementById('postponeConfirmButton').addEventListener('click', async () => {
+        closePostponeLimitModal();
+        await commitPostpone(pendingLaterTime);
+      });
+    }
+
+    async function initPostponeMode() {
+      document.getElementById('later-postpone-screen').style.display = '';
+
+      currentTask = await loadTask(currentUser.uid, taskId);
+      if (!currentTask) {
         location.href = 'task-list.html';
         return;
       }
 
-      await delayTaskWithLaterTime(currentUser.uid, taskId, laterTime);
-      location.href = 'task-list.html';
-    }
+      document.getElementById('later-task-title').textContent = getTaskTitle(currentTask);
 
-    async function init() {
-      currentUser = await requireAuth();
-      showRandomLaterMessage();
+      const userData = await loadUserData(currentUser.uid);
+      messageType = (userData && userData.notificationSettings && userData.notificationSettings.messageType) || 'normal';
+      showLaterMessage();
 
       document.querySelectorAll('.later-time-button').forEach(function(button) {
         button.setAttribute('aria-pressed', 'false');
@@ -103,6 +264,19 @@
           selectLaterTime(button);
         });
       });
+
+      initPostponeLimitButtons();
+    }
+
+    async function init() {
+      currentUser = await requireAuth();
+      initNavDrawer();
+
+      if (taskId) {
+        await initPostponeMode();
+      } else {
+        await initListMode();
+      }
     }
 
     init();

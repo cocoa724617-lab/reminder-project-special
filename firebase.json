@@ -21,6 +21,14 @@
       "**/node_modules/**",
       "functions/**",
       "prompt-logs/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(html|js|css|webmanifest)",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache" }
+        ]
+      }
     ]
   }
 }

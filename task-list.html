@@ -2,38 +2,85 @@
 <html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>タスク一覧</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#ffffff">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
-<body class="task-list-page">
-  <h1>タスク一覧</h1>
+<body class="task-list-page has-fixed-header">
+  <div id="nav-drawer-backdrop" class="nav-drawer-backdrop"></div>
+  <nav id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-header">
+      <span class="nav-drawer-title">メニュー</span>
+    </div>
+    <ul class="nav-drawer-list">
+      <li><a href="completed-tasks.html">完了済みタスク</a></li>
+      <li><a href="stats.html">実績・記録</a></li>
+      <li><a href="#" id="logout-link" class="is-logout">ログアウト</a></li>
+    </ul>
+  </nav>
+
+  <header class="top-bar">
+    <button id="hamburger-button" class="hamburger-button" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <h1>タスク一覧</h1>
+  </header>
 
   <section id="task-list-screen">
     <div id="task-list"></div>
-
-    <a href="task-form.html" class="button-link">タスクを追加する</a>
-    <a href="index.html" class="button-link">ホームに戻る</a>
-   
   </section>
+
+  <a href="task-form.html" class="fab-button" aria-label="タスクを追加">+</a>
 
   <script type="module">
     import { requireAuth } from "./auth-guard.js";
+    import { initNavDrawer } from "./nav-drawer.js";
     import { loadTasks, completeTask as completeTaskInFirestore } from "./tasks-data.js";
+    import { getTaskLabel, applyLabelBar, setCustomLabelNames, normalizeImportance, IMPORTANCE_LABELS, normalizeUrgency, URGENCY_LABELS, REPEAT_LABELS, isRepeatingTask } from "./task-labels.js";
+    import { loadUserData } from "./user-data.js";
+    import { celebrateCompletion } from "./celebrate.js";
 
-    function formatTaskPriority(priority) {
-      const value = String(priority || '').trim().toLowerCase();
+    function getReminderLabel(task) {
+      if (task.notifyDate) {
+        return `通知日時：${task.notifyDate}${task.time ? ' ' + task.time : ''}`;
+      }
+      if (task.frequency && task.frequency !== 'none') {
+        if (task.frequencyCount) {
+          const unitLabel = task.frequencyUnit === 'week' ? '1週間' : '1日';
+          return `${unitLabel}に${task.frequencyCount}回くらいランダム通知`;
+        }
+        const freqLabel = {
+          small: '少なめ（1〜2回/日）',
+          medium: '普通（3〜4回/日）',
+          large: '多め（5〜7回/日）'
+        }[task.frequency] || task.frequency;
+        return `ランダム通知・${freqLabel}`;
+      }
+      if (task.dueDate || task.date) {
+        return `期限：${task.dueDate || task.date}`;
+      }
+      return '日時未設定';
+    }
 
-      if (value === 'high' || value === '高' || value.includes('高') || value.includes('鬮')) return '高';
-      if (value === 'low' || value === '低' || value.includes('低') || value.includes('菴')) return '低';
-      if (value === 'medium' || value === '中' || value.includes('中') || value.includes('荳')) return '中';
-      return priority || '-';
+    function buildMetaPills(task) {
+      const importance = normalizeImportance(task.priority || task.importance || task.priorityLevel);
+      const urgency = normalizeUrgency(task.urgency);
+      const labelMeta = getTaskLabel(task.color);
+      const pills = [`<span class="meta-pill meta-pill-importance-${importance}">重要度：${IMPORTANCE_LABELS[importance]}</span>`];
+      pills.push(`<span class="meta-pill">予定：${URGENCY_LABELS[urgency]}</span>`);
+      if (task.color && task.color !== 'none') {
+        pills.push(`<span class="meta-pill meta-pill-label" style="--label-color:${labelMeta.color}">${labelMeta.name}</span>`);
+      }
+      if (isRepeatingTask(task)) {
+        pills.push(`<span class="meta-pill">🔁 ${REPEAT_LABELS[task.repeat] || task.repeat}</span>`);
+      }
+      return `<div class="meta-pill-row">${pills.join('')}</div>`;
     }
 
     const taskList = document.getElementById('task-list');
@@ -44,7 +91,7 @@
       taskList.innerHTML = '';
 
       if (tasks.length === 0) {
-        taskList.innerHTML = '<p>登録されたタスクはありません。</p>';
+        taskList.innerHTML = '<p class="task-list-empty">まだタスクがありません。＋ボタンから追加できます。</p>';
         return;
       }
 
@@ -61,15 +108,19 @@
         const task = tasks[index];
         const taskCard = document.createElement('div');
         taskCard.className = 'task-card';
+        applyLabelBar(taskCard, task.color);
+
+        const later = (String(task.status || '').trim() === '後でやる');
+        const memo = task.memo || task.description || '';
+        const labelMeta = getTaskLabel(task.color);
 
         taskCard.innerHTML = `
           <div class="task-info">
-            <h3>${task.title || task.name || '(無題)'}</h3>
-            <p>期限：${task.date || task.dueDate || '未設定'}</p>
-            <p>カテゴリ：${task.category || '-'}</p>
-            <p>優先度：${formatTaskPriority(task.priority || task.importance || task.priorityLevel)}</p>
-            <p>状態：${task.status || '後でやる'}</p>
-            <p>メモ：${task.memo || task.description || 'なし'}</p>
+            <h3><span class="color-dot task-title-dot" style="background:${labelMeta.color}"></span>${task.title || task.name || '(無題)'}</h3>
+            <p class="task-remind">${getReminderLabel(task)}</p>
+            ${buildMetaPills(task)}
+            <p class="task-memo">メモ：${memo || 'なし'}</p>
+            <span class="status-pill ${later ? 'status-later' : 'status-pending'}">${later ? '後でやる' : '未完了'}</span>
           </div>
           <div class="task-actions">
             <button id="complete-${index}">完了</button>
@@ -87,10 +138,11 @@
     }
 
     async function completeTask(index) {
-      if (!confirm('このタスクを完了（削除）しますか？')) return;
+      if (!confirm('このタスクを完了にしますか？')) return;
       const removed = tasks[index];
       await completeTaskInFirestore(currentUser.uid, removed);
       tasks.splice(index, 1);
+      celebrateCompletion();
       render();
     }
 
@@ -104,6 +156,9 @@
 
     async function init() {
       currentUser = await requireAuth();
+      initNavDrawer();
+      const userData = await loadUserData(currentUser.uid);
+      setCustomLabelNames(userData && userData.labelNames);
       tasks = await loadTasks(currentUser.uid);
       render();
     }
@@ -117,14 +172,14 @@
     <span>Home</span>
   </a>
 
-  <a href="task-form.html">
-    <span class="icon">➕</span>
-    <span>Add</span>
-  </a>
-
-  <a href="task-list.html">
+  <a href="task-list.html" class="is-active">
     <span class="icon">📋</span>
     <span>List</span>
+  </a>
+
+  <a href="atodeyaru.html">
+    <span class="icon">🕒</span>
+    <span>あとで</span>
   </a>
 
   <a href="notification-settings.html">

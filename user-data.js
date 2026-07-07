@@ -17,3 +17,7 @@ export async function saveFcmToken(uid, token) {
 export async function saveNotificationSettings(uid, settings) {
   await setDoc(doc(db, "users", uid), { notificationSettings: settings }, { merge: true });
 }
+
+export async function saveLabelNames(uid, labelNames) {
+  await setDoc(doc(db, "users", uid), { labelNames }, { merge: true });
+}

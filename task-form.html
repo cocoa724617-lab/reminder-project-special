@@ -2,62 +2,50 @@
 <html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>タスク登録 / 編集</title>
 <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#ffffff">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
-<body class="task-form-page">
-  <h1>タスクを登録 / 編集</h1>
+<body class="task-modal-page">
 
-  <form id="task-form">
-    <div class="form-group">
-      <label for="task-name">タスク名</label>
-      <input id="task-name" name="name" type="text" required>
+  <div id="ios-install-banner" class="ios-banner-card" style="display:none;">
+    <span class="ios-banner-icon" aria-hidden="true">📲</span>
+    <p>iPhoneで通知を受け取るには、共有ボタンから「ホーム画面に追加」し、追加後はホーム画面のアイコンから開いて通知を許可してください。</p>
+  </div>
+
+  <form id="task-form" class="task-modal-card" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
+    <div class="task-modal-header">
+      <button id="closeModalButton" class="modal-icon-button" type="button" aria-label="閉じる">×</button>
+      <h1 id="task-modal-title" class="task-modal-title">タスク設定</h1>
+      <button id="saveTaskButton" class="modal-icon-button modal-icon-save" type="button" aria-label="保存">✓</button>
     </div>
 
-    <div class="form-group">
-      <label for="task-desc">説明（任意）</label>
-      <textarea id="task-desc" name="description" rows="3"></textarea>
+    <div class="modal-field">
+      <input id="task-name" name="name" type="text" class="modal-name-input" placeholder="タスク名を入力" required>
     </div>
 
-    <div class="form-group">
-      <label for="task-time">通知日時（頻度が「無し」の場合のみ必須）</label>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <input id="task-notify-date" name="notifyDate" type="date" style="width:160px">
-        <input id="task-time" name="time" type="time" style="width:120px">
-        <span class="small">※頻度を選んだ場合は毎日ランダムな時間に通知されるため、ここは空欄でOKです</span>
+    <div class="modal-field">
+      <span class="modal-field-label">色ラベル</span>
+      <div class="color-picker" id="color-picker">
+        <button type="button" class="color-swatch" data-color="none" style="--swatch-color:#c7c7cc" aria-label="ラベルなし"><span class="color-check">✓</span></button>
+        <button type="button" class="color-swatch" data-color="urgent" style="--swatch-color:#ff3b30" aria-label="緊急"><span class="color-check">✓</span></button>
+        <button type="button" class="color-swatch" data-color="school" style="--swatch-color:#0a84ff" aria-label="学校"><span class="color-check">✓</span></button>
+        <button type="button" class="color-swatch" data-color="life" style="--swatch-color:#34c759" aria-label="生活"><span class="color-check">✓</span></button>
+        <button type="button" class="color-swatch" data-color="jobhunt" style="--swatch-color:#bf5af2" aria-label="就活"><span class="color-check">✓</span></button>
+        <button type="button" class="color-swatch" data-color="think-later" style="--swatch-color:#8e8e93" aria-label="後で考える"><span class="color-check">✓</span></button>
       </div>
+      <p id="color-label-text" class="color-label-text">ラベルなし</p>
+      <input type="hidden" id="task-color" name="color" value="none">
     </div>
 
-    <div class="form-group">
-      <label>このタスクの通知を有効にする</label>
-      <input id="task-enable" name="enabled" type="checkbox" checked>
-    </div>
-
-    <div class="form-group">
-      <label>通知の頻度（1日あたり・タスク単位）</label>
-      <div class="radios">
-        <label><input type="radio" name="frequency" value="none"> 無し</label>
-        <label><input type="radio" name="frequency" value="small"> 小（1〜2回/日）</label>
-        <label><input type="radio" name="frequency" value="medium" checked> 中（3〜4回/日）</label>
-        <label><input type="radio" name="frequency" value="large"> 大（5〜7回/日）</label>
-      </div>
-      <span class="small">「無し」以外を選ぶと、タスクを完了にするまで毎日ランダムな時間に通知します（通知してよい時間帯は⚙️設定で変更できます）</span>
-    </div>
-
-    <div class="form-group">
-      <label for="task-due">期限（期日）</label>
-      <input id="task-due" name="dueDate" type="date">
-    </div>
-
-    <div class="form-group">
-      <label for="task-priority">重要度</label>
+    <div class="modal-field">
+      <span class="modal-field-label">重要度</span>
       <select id="task-priority" name="priority">
         <option value="low">低</option>
         <option value="medium" selected>中</option>
@@ -65,108 +53,404 @@
       </select>
     </div>
 
-    <div class="form-group">
-      <label for="task-repeat">提出頻度（繰り返し）</label>
-      <select id="task-repeat" name="repeatType">
-        <option value="none">なし（単発）</option>
-        <option value="daily">毎日</option>
-        <option value="weekly">毎週</option>
-        <option value="monthly">毎月</option>
-        <option value="custom">カスタム（N日ごと）</option>
+    <div class="modal-field">
+      <span class="modal-field-label">優先度</span>
+      <select id="task-urgency" name="urgency">
+        <option value="today" selected>今日やる</option>
+        <option value="thisWeek">今週中</option>
+        <option value="whenFree">余裕があれば</option>
       </select>
-      <div id="custom-repeat" style="display:none; margin-top:8px;">
-        <label class="inline">間隔（日）: <input id="task-repeat-interval" type="number" min="1" value="1" style="width:80px"></label>
+    </div>
+
+    <div class="modal-field">
+      <span class="modal-field-label">メモ</span>
+      <textarea id="task-desc" name="description" rows="3" placeholder="補足があれば自由に書けます"></textarea>
+    </div>
+
+    <div class="modal-field">
+      <span class="modal-field-label">期限</span>
+      <div class="due-date-row">
+        <button type="button" id="prevDayButton" class="due-side-button" aria-label="前日">‹</button>
+        <button type="button" id="dueDateButton" class="due-date-button">期限を設定</button>
+        <button type="button" id="nextDayButton" class="due-side-button" aria-label="翌日">›</button>
       </div>
+      <input type="hidden" id="task-due" name="dueDate">
     </div>
 
-    <div class="form-group">
-      <label>通知タイプ（タスクの個別設定）</label>
-      <label><input type="checkbox" name="notification-type" value="browser" checked> ブラウザ通知</label>
+    <div class="modal-field modal-field-row">
+      <span class="modal-field-label">繰り返す</span>
+      <label class="ios-toggle">
+        <input id="task-repeat-enable" type="checkbox">
+        <span class="ios-toggle-track"><span class="ios-toggle-thumb"></span></span>
+      </label>
     </div>
 
-    <div class="actions">
-      <button id="saveTaskButton" type="button">保存</button>
-      <button type="button" onclick="location.href='task-list.html'">キャンセル</button>
+    <div class="modal-field" id="repeat-frequency-field" style="display:none;">
+      <span class="modal-field-label">繰り返す頻度</span>
+      <select id="task-repeat-frequency">
+        <option value="daily">毎日</option>
+        <option value="weekly" selected>毎週</option>
+        <option value="monthly">毎月</option>
+        <option value="yearly">毎年</option>
+      </select>
     </div>
+
+    <div class="modal-field modal-field-row">
+      <span class="modal-field-label">通知する</span>
+      <label class="ios-toggle">
+        <input id="task-enable" name="enabled" type="checkbox" checked>
+        <span class="ios-toggle-track"><span class="ios-toggle-thumb"></span></span>
+      </label>
+    </div>
+
+    <div class="modal-field notification-frequency-field">
+      <span class="modal-field-label">ランダム通知の回数</span>
+      <div class="frequency-unit-toggle" aria-label="通知回数の単位">
+        <button type="button" class="frequency-unit-button is-selected" data-unit="day">1日</button>
+        <button type="button" class="frequency-unit-button" data-unit="week">1週間</button>
+      </div>
+      <div class="frequency-count-row">
+        <input id="frequency-count" name="frequencyCount" type="range" class="frequency-slider" min="1" max="10" step="1" value="3">
+        <span id="frequency-value-label" class="frequency-value-label">3回</span>
+      </div>
+      <p id="frequency-summary" class="frequency-summary">1日に3回くらいランダム通知</p>
+      <input id="frequency-unit" name="frequencyUnit" type="hidden" value="day">
+    </div>
+
+    <div class="modal-field">
+      <span class="modal-field-label">この日時に必ず通知する</span>
+      <div id="fixed-reminder-list" class="fixed-reminder-list"></div>
+      <button type="button" id="addFixedReminderButton" class="add-fixed-reminder-button">＋ 日時を追加</button>
+    </div>
+
+    <!-- 既存の詳細設定（UIには出さないが、データは保持する） -->
+    <div class="legacy-hidden-fields" aria-hidden="true">
+      <input id="task-notify-date" name="notifyDate" type="date">
+      <input id="task-time" name="time" type="time">
+
+      <input type="radio" name="frequency" value="none">
+      <input type="radio" name="frequency" value="small">
+      <input type="radio" name="frequency" value="medium" checked>
+      <input type="radio" name="frequency" value="large">
+
+      <input type="checkbox" name="notification-type" value="browser" checked>
+    </div>
+
+    <button type="button" id="deleteTaskButton" class="delete-task-button" style="display:none;">設定を削除</button>
   </form>
+
+  <!-- 期限カレンダーモーダル -->
+  <div id="calendar-modal" class="mini-modal-overlay" aria-hidden="true">
+    <div class="mini-modal-card">
+      <div class="mini-modal-header">
+        <button type="button" class="calendar-nav-button" id="calendarPrevMonth" aria-label="前の月">‹</button>
+        <h2 id="calendarMonthLabel">2026年7月</h2>
+        <button type="button" class="calendar-nav-button" id="calendarNextMonth" aria-label="次の月">›</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+      <button type="button" class="mini-modal-close-text" id="calendarModalClose">閉じる</button>
+    </div>
+  </div>
 
   <script type="module">
     import { requireAuth } from "./auth-guard.js";
-    import { loadTask, saveTask } from "./tasks-data.js";
-    import { app, db } from "./firebase-init.js";
+    import { loadTask, saveTask, deleteTask, saveFixedReminders, clearFixedReminders } from "./tasks-data.js";
+    import { getTaskLabel, setCustomLabelNames, normalizeImportance, normalizeUrgency } from "./task-labels.js";
+    import { app } from "./firebase-init.js";
     import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging.js";
-    import {
-      collection,
-      addDoc,
-      serverTimestamp,
-      Timestamp
-    } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
     import { VAPID_KEY } from "./fcm-config.js";
-    import { saveFcmToken } from "./user-data.js";
+    import { loadUserData, saveFcmToken } from "./user-data.js";
     import { isPushSupported, isIosDevice, isStandaloneDisplayMode } from "./pwa-notifications.js";
 
     const form = document.getElementById('task-form');
     const params = new URLSearchParams(location.search);
     const editId = params.get('id');
 
-    const repeatSelect = document.getElementById('task-repeat');
-    const customRepeat = document.getElementById('custom-repeat');
-    repeatSelect.addEventListener('change', () => {
-      customRepeat.style.display = repeatSelect.value === 'custom' ? 'block' : 'none';
+    const frequencyUnitInput = document.getElementById('frequency-unit');
+    const frequencyCountInput = document.getElementById('frequency-count');
+    const frequencySummary = document.getElementById('frequency-summary');
+    const frequencyValueLabel = document.getElementById('frequency-value-label');
+
+    function clampFrequencyCount(value) {
+      const parsed = parseInt(value, 10);
+      if (!Number.isFinite(parsed)) return 1;
+      return Math.min(10, Math.max(1, parsed));
+    }
+
+    function legacyFrequencyFromCount(unit, count) {
+      if (count <= 3) return 'small';
+      if (count <= 7) return 'medium';
+      return 'large';
+    }
+
+    function updateLegacyFrequencyInput() {
+      const unit = frequencyUnitInput.value || 'day';
+      const count = clampFrequencyCount(frequencyCountInput.value);
+      const legacyFrequency = legacyFrequencyFromCount(unit, count);
+      const freqInput = document.querySelector(`input[name="frequency"][value="${legacyFrequency}"]`);
+      if (freqInput) freqInput.checked = true;
+      frequencyCountInput.value = String(count);
+      frequencyValueLabel.textContent = `${count}回`;
+      frequencySummary.textContent = unit === 'week'
+        ? `1週間に${count}回くらいランダム通知`
+        : `1日に${count}回くらいランダム通知`;
+    }
+
+    function setFrequencyValue(unit, count) {
+      frequencyUnitInput.value = unit === 'week' ? 'week' : 'day';
+      frequencyCountInput.value = String(clampFrequencyCount(count));
+      document.querySelectorAll('.frequency-unit-button').forEach((button) => {
+        button.classList.toggle('is-selected', button.dataset.unit === frequencyUnitInput.value);
+      });
+      updateLegacyFrequencyInput();
+    }
+
+    document.querySelectorAll('.frequency-unit-button').forEach((button) => {
+      button.addEventListener('click', () => setFrequencyValue(button.dataset.unit, frequencyCountInput.value));
     });
 
-    function normalizePriorityValue(priority) {
-      const value = String(priority || '').trim().toLowerCase();
+    frequencyCountInput.addEventListener('input', updateLegacyFrequencyInput);
 
-      if (value === 'high' || value === '高' || value.includes('高') || value.includes('鬮')) return 'high';
-      if (value === 'low' || value === '低' || value.includes('低') || value.includes('菴')) return 'low';
-      return 'medium';
+    // ===== 必ず通知する日時（個別・複数設定可） =====
+    const fixedReminderList = document.getElementById('fixed-reminder-list');
+
+    function createFixedReminderRow(dateValue, timeValue) {
+      const row = document.createElement('div');
+      row.className = 'fixed-reminder-row';
+
+      const dateInput = document.createElement('input');
+      dateInput.type = 'date';
+      dateInput.className = 'fixed-reminder-date';
+      dateInput.value = dateValue || '';
+
+      const timeInput = document.createElement('input');
+      timeInput.type = 'time';
+      timeInput.className = 'fixed-reminder-time';
+      timeInput.value = timeValue || '';
+
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'fixed-reminder-remove';
+      removeButton.setAttribute('aria-label', 'この日時を削除');
+      removeButton.textContent = '×';
+      removeButton.addEventListener('click', () => row.remove());
+
+      row.appendChild(dateInput);
+      row.appendChild(timeInput);
+      row.appendChild(removeButton);
+      return row;
     }
+
+    function addFixedReminderRow(dateValue, timeValue) {
+      fixedReminderList.appendChild(createFixedReminderRow(dateValue, timeValue));
+    }
+
+    function setFixedReminderEntries(entries) {
+      fixedReminderList.innerHTML = '';
+      (entries || []).forEach((entry) => addFixedReminderRow(entry.date, entry.time));
+    }
+
+    function getFixedReminderEntries() {
+      return Array.from(fixedReminderList.querySelectorAll('.fixed-reminder-row'))
+        .map((row) => ({
+          date: row.querySelector('.fixed-reminder-date').value,
+          time: row.querySelector('.fixed-reminder-time').value
+        }))
+        .filter((entry) => entry.date && entry.time);
+    }
+
+    document.getElementById('addFixedReminderButton').addEventListener('click', () => addFixedReminderRow('', ''));
+
+    // ===== 色ラベル選択 =====
+    function selectColor(value) {
+      document.getElementById('task-color').value = value;
+      document.getElementById('color-label-text').textContent = getTaskLabel(value).name;
+      document.querySelectorAll('.color-swatch').forEach((btn) => {
+        btn.classList.toggle('is-selected', btn.dataset.color === value);
+      });
+    }
+
+    document.querySelectorAll('.color-swatch').forEach((btn) => {
+      btn.addEventListener('click', () => selectColor(btn.dataset.color));
+    });
+
+    // ===== 期限設定 =====
+    const dueDateInput = document.getElementById('task-due');
+    const dueDateButton = document.getElementById('dueDateButton');
+
+    function toDateStr(dt) {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function formatDueDateLabel(dateStr) {
+      if (!dateStr) return '期限を設定';
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const weekday = ['日', '月', '火', '水', '木', '金', '土'][dt.getDay()];
+      return `${m}月${d}日(${weekday})`;
+    }
+
+    function setDueDate(dateStr) {
+      dueDateInput.value = dateStr || '';
+      dueDateButton.textContent = formatDueDateLabel(dateStr);
+    }
+
+    function shiftDueDate(days) {
+      const base = dueDateInput.value ? new Date(dueDateInput.value + 'T00:00:00') : new Date();
+      base.setDate(base.getDate() + days);
+      setDueDate(toDateStr(base));
+    }
+
+    document.getElementById('prevDayButton').addEventListener('click', () => shiftDueDate(-1));
+    document.getElementById('nextDayButton').addEventListener('click', () => shiftDueDate(1));
+    dueDateButton.addEventListener('click', () => openCalendarModal());
+
+    // ===== 繰り返し =====
+    const repeatEnableInput = document.getElementById('task-repeat-enable');
+    const repeatFrequencyField = document.getElementById('repeat-frequency-field');
+    const repeatFrequencyInput = document.getElementById('task-repeat-frequency');
+
+    function setRepeatValue(repeat) {
+      const enabled = !!repeat && repeat !== 'none';
+      repeatEnableInput.checked = enabled;
+      repeatFrequencyField.style.display = enabled ? '' : 'none';
+      if (enabled) repeatFrequencyInput.value = repeat;
+    }
+
+    repeatEnableInput.addEventListener('change', () => {
+      repeatFrequencyField.style.display = repeatEnableInput.checked ? '' : 'none';
+    });
+
+    // ===== 期限カレンダーモーダル =====
+    let calendarViewDate = new Date();
+
+    function openCalendarModal() {
+      const base = dueDateInput.value ? new Date(dueDateInput.value + 'T00:00:00') : new Date();
+      calendarViewDate = new Date(base.getFullYear(), base.getMonth(), 1);
+      renderCalendar();
+      showMiniModal('calendar-modal');
+    }
+
+    function renderCalendar() {
+      const year = calendarViewDate.getFullYear();
+      const month = calendarViewDate.getMonth();
+      document.getElementById('calendarMonthLabel').textContent = `${year}年${month + 1}月`;
+
+      const grid = document.getElementById('calendar-grid');
+      grid.innerHTML = '';
+
+      const startOffset = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const todayStr = toDateStr(new Date());
+      const selectedStr = dueDateInput.value;
+
+      for (let i = 0; i < startOffset; i++) {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'calendar-day';
+        cell.disabled = true;
+        grid.appendChild(cell);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = toDateStr(new Date(year, month, day));
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'calendar-day';
+        cell.textContent = String(day);
+        if (dateStr === todayStr) cell.classList.add('is-today');
+        if (dateStr === selectedStr) cell.classList.add('is-selected');
+        cell.addEventListener('click', () => {
+          setDueDate(dateStr);
+          hideMiniModal('calendar-modal');
+        });
+        grid.appendChild(cell);
+      }
+    }
+
+    document.getElementById('calendarPrevMonth').addEventListener('click', () => {
+      calendarViewDate.setMonth(calendarViewDate.getMonth() - 1);
+      renderCalendar();
+    });
+    document.getElementById('calendarNextMonth').addEventListener('click', () => {
+      calendarViewDate.setMonth(calendarViewDate.getMonth() + 1);
+      renderCalendar();
+    });
+    document.getElementById('calendarModalClose').addEventListener('click', () => hideMiniModal('calendar-modal'));
+
+    // ===== 簡易モーダル共通処理 =====
+    function showMiniModal(id) {
+      const el = document.getElementById(id);
+      el.classList.add('is-visible');
+      el.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideMiniModal(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('is-visible');
+      el.setAttribute('aria-hidden', 'true');
+    }
+
+    document.querySelectorAll('.mini-modal-overlay').forEach((overlay) => {
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) hideMiniModal(overlay.id);
+      });
+    });
+
+    // タスク設定モーダルの外側（背景）をタップしたら保存せずに閉じる
+    document.body.addEventListener('click', (event) => {
+      if (event.target === document.body) {
+        location.href = 'task-list.html';
+      }
+    });
+
+    document.getElementById('closeModalButton').addEventListener('click', () => {
+      location.href = 'task-list.html';
+    });
 
     function populateForm(task) {
       document.getElementById('task-name').value = task.name || task.title || '';
       document.getElementById('task-desc').value = task.description || task.memo || '';
       document.getElementById('task-time').value = task.time || '';
       document.getElementById('task-notify-date').value = task.notifyDate || task.notificationDate || '';
-      document.getElementById('task-enable').checked = !!task.enabled;
+      document.getElementById('task-enable').checked = task.enabled !== false;
       const freq = task.frequency || 'medium';
       const freqInput = document.querySelector(`input[name="frequency"][value="${freq}"]`);
       if (freqInput) freqInput.checked = true;
       const types = task.notificationTypes || [];
       document.querySelectorAll('input[name="notification-type"]').forEach(cb => { cb.checked = types.includes(cb.value); });
 
-      document.getElementById('task-due').value = task.dueDate || task.date || '';
-      document.getElementById('task-priority').value = normalizePriorityValue(task.priority || task.importance || task.priorityLevel || 'medium');
-      if (task.repeat) {
-        document.getElementById('task-repeat').value = task.repeat.type || 'none';
-        if (task.repeat.type === 'custom') {
-          document.getElementById('task-repeat-interval').value = task.repeat.interval || 1;
-          customRepeat.style.display = 'block';
-        }
-      }
+      selectColor(task.color || 'none');
+      setDueDate(task.dueDate || task.date || '');
+      setRepeatValue(task.repeat);
+      document.getElementById('task-priority').value = normalizeImportance(task.priority || task.importance || task.priorityLevel || 'medium');
+      document.getElementById('task-urgency').value = normalizeUrgency(task.urgency);
+
+      const unit = task.frequencyUnit || task.randomFrequencyUnit || 'day';
+      const fallbackCount = freq === 'small' ? 1 : freq === 'large' ? 6 : 3;
+      setFrequencyValue(unit, task.frequencyCount || task.randomFrequencyCount || fallbackCount);
+
+      setFixedReminderEntries(task.fixedReminders || []);
     }
 
     window.currentFcmToken = null;
 
-    async function saveReminderToFirestore(taskId, uid, title, remindAt, token) {
-      try {
-        const docRef = await addDoc(collection(db, "reminders"), {
-          taskId: taskId,
-          uid: uid,
-          title: title,
-          body: "リマインダー通知です",
-          remindAt: Timestamp.fromDate(new Date(remindAt)),
-          fcmToken: token,
-          notified: false,
-          createdAt: serverTimestamp()
-        });
-        console.log("Firestore保存成功:", docRef.id);
-      } catch (error) {
-        console.error("Firestore保存エラー:", error);
+    function updateIosInstallBanner() {
+      const banner = document.getElementById('ios-install-banner');
+      if (banner && isIosDevice() && !isStandaloneDisplayMode()) {
+        banner.style.display = 'flex';
       }
     }
 
     async function requestNotificationPermission() {
+      updateIosInstallBanner();
+
       if (!isPushSupported() || (isIosDevice() && !isStandaloneDisplayMode())) {
         console.log("この環境では通知に対応していません");
         return;
@@ -178,53 +462,86 @@
           console.log("通知が許可されませんでした");
           return;
         }
+        const swRegistration = await navigator.serviceWorker.register("firebase-messaging-sw.js");
+        await navigator.serviceWorker.ready;
         const messaging = getMessaging(app);
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration });
         if (token) {
           console.log("FCMトークン:", token);
           window.currentFcmToken = token;
+          window.currentFcmTokenError = null;
           if (currentUser) await saveFcmToken(currentUser.uid, token);
         } else {
           console.log("FCMトークンを取得できませんでした");
+          window.currentFcmTokenError = "トークンが空でした";
         }
       } catch (error) {
         console.error("通知許可またはトークン取得でエラー:", error);
+        window.currentFcmTokenError = (error && error.message) || String(error);
       }
     }
 
     let currentUser = null;
     let existingTask = null;
 
+    async function onDeleteTask() {
+      if (!confirm('このタスクを削除しますか？この操作は取り消せません。')) return;
+      await deleteTask(currentUser.uid, editId);
+      location.href = 'task-list.html';
+    }
+
     async function init() {
+      selectColor('none');
+      setDueDate('');
+      setRepeatValue('none');
+      setFrequencyValue('day', 3);
+      setFixedReminderEntries([]);
+
       currentUser = await requireAuth();
       requestNotificationPermission();
+
+      const userData = await loadUserData(currentUser.uid);
+      setCustomLabelNames(userData && userData.labelNames);
 
       if (editId) {
         existingTask = await loadTask(currentUser.uid, editId);
         if (existingTask) populateForm(existingTask);
+
+        const deleteButton = document.getElementById('deleteTaskButton');
+        deleteButton.style.display = 'block';
+        deleteButton.addEventListener('click', onDeleteTask);
       }
 
       document.getElementById('saveTaskButton').addEventListener('click', onSave);
     }
 
     async function onSave() {
+      const notificationEnabled = document.getElementById('task-enable').checked;
+      if (notificationEnabled && !window.currentFcmToken) {
+        await requestNotificationPermission();
+      }
+
       const formData = new FormData(form);
-      const frequency = formData.get('frequency') || 'medium';
+      const frequencyUnit = formData.get('frequencyUnit') === 'week' ? 'week' : 'day';
+      const frequencyCount = clampFrequencyCount(formData.get('frequencyCount'));
+      const frequency = notificationEnabled
+        ? legacyFrequencyFromCount(frequencyUnit, frequencyCount)
+        : 'none';
 
       const errors = [];
       if (!formData.get('name') || !formData.get('name').trim()) {
         errors.push('・タスク名を入力してください');
       }
-      if (frequency === 'none') {
-        if (!formData.get('notifyDate')) {
-          errors.push('・通知日付を入力してください');
+      if (notificationEnabled && !window.currentFcmToken) {
+        if (isIosDevice() && !isStandaloneDisplayMode()) {
+          errors.push('・iPhoneで通知を受け取るには、共有ボタンから「ホーム画面に追加」し、追加後はホーム画面のアイコンから開いてください');
+        } else {
+          let msg = '・通知が許可されていません。ブラウザの通知を許可してからもう一度お試しください';
+          if (window.currentFcmTokenError) {
+            msg += `\n  (詳細: ${window.currentFcmTokenError})`;
+          }
+          errors.push(msg);
         }
-        if (!formData.get('time')) {
-          errors.push('・通知時刻を入力してください');
-        }
-      }
-      if (!window.currentFcmToken) {
-        errors.push('・通知が許可されていません。ブラウザの通知を許可してからもう一度お試しください');
       }
 
       if (errors.length > 0) {
@@ -232,13 +549,10 @@
         return;
       }
 
-      const repeatType = formData.get('repeatType');
-      const repeat = repeatType === 'none' ? null : {
-        type: repeatType,
-        interval: repeatType === 'custom' ? parseInt(document.getElementById('task-repeat-interval').value || '1', 10) : undefined
-      };
+      const fixedReminders = getFixedReminderEntries();
 
       const taskObj = {
+        ...(existingTask || {}),
         id: editId || null,
         name: formData.get('name'),
         title: formData.get('name'),
@@ -246,21 +560,26 @@
         memo: formData.get('description'),
         time: formData.get('time'),
         notifyDate: formData.get('notifyDate'),
-        enabled: document.getElementById('task-enable').checked,
+        enabled: notificationEnabled,
         status: (existingTask && existingTask.status) || '未完了',
         frequency: frequency,
+        frequencyUnit: frequencyUnit,
+        frequencyCount: frequencyCount,
         priority: formData.get('priority') || 'medium',
+        urgency: formData.get('urgency') || 'today',
         notificationTypes: formData.getAll('notification-type'),
+        color: formData.get('color') || 'none',
         dueDate: formData.get('dueDate') || null,
-        repeat: repeat
+        repeat: repeatEnableInput.checked ? repeatFrequencyInput.value : 'none',
+        fixedReminders: fixedReminders
       };
 
       const savedId = await saveTask(currentUser.uid, taskObj);
 
-      if (frequency === 'none') {
-        const remindAt = taskObj.notifyDate + "T" + taskObj.time + ":00+09:00";
-        console.log("Firestoreに保存開始:", taskObj.name, remindAt);
-        await saveReminderToFirestore(savedId, currentUser.uid, taskObj.name, remindAt, window.currentFcmToken);
+      if (notificationEnabled && fixedReminders.length > 0) {
+        await saveFixedReminders(currentUser.uid, savedId, taskObj.name, window.currentFcmToken, fixedReminders);
+      } else {
+        await clearFixedReminders(currentUser.uid, savedId);
       }
 
       alert('保存しました');
@@ -269,28 +588,6 @@
 
     init();
   </script>
-
-<nav class="bottom-nav">
-  <a href="index.html">
-    <span class="icon">🏠</span>
-    <span>Home</span>
-  </a>
-
-  <a href="task-form.html">
-    <span class="icon">➕</span>
-    <span>Add</span>
-  </a>
-
-  <a href="task-list.html">
-    <span class="icon">📋</span>
-    <span>List</span>
-  </a>
-
-  <a href="notification-settings.html">
-    <span class="icon">⚙️</span>
-    <span>Setting</span>
-  </a>
-</nav>
 
 </body>
 </html>

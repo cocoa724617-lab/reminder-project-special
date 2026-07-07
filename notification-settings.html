@@ -2,25 +2,45 @@
 <html lang="ja" class="auth-checking">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>通知設定</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#ffffff">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="リマインダー">
 </head>
-<body class="notification-settings-page">
-  <h1>通知設定</h1>
+<body class="notification-settings-page has-fixed-header">
+  <div id="nav-drawer-backdrop" class="nav-drawer-backdrop"></div>
+  <nav id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-header">
+      <span class="nav-drawer-title">メニュー</span>
+    </div>
+    <ul class="nav-drawer-list">
+      <li><a href="completed-tasks.html">完了済みタスク</a></li>
+      <li><a href="stats.html">実績・記録</a></li>
+      <li><a href="#" id="logout-link" class="is-logout">ログアウト</a></li>
+    </ul>
+  </nav>
+
+  <header class="top-bar">
+    <button id="hamburger-button" class="hamburger-button" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <h1>通知設定</h1>
+  </header>
 
   <section id="user-info" class="user-info"></section>
   <button id="logout-button" type="button" class="btn-secondary">ログアウト</button>
 
   <section id="push-notification-section" class="card">
     <h2>通知の利用状況</h2>
-    <p id="ios-install-banner" style="display:none;">iPhoneで通知を受け取るには、共有ボタンから「ホーム画面に追加」してください。</p>
+    <div id="ios-install-banner" class="ios-banner-card" style="display:none;">
+      <span class="ios-banner-icon" aria-hidden="true">📲</span>
+      <p>iPhoneで通知を受け取るには、共有ボタンから「ホーム画面に追加」してください。</p>
+    </div>
     <p id="unsupported-banner" style="display:none;">この環境では通知に対応していません。</p>
     <div id="permission-section" style="display:none;">
       <button id="request-permission-button" type="button" class="btn-secondary">通知を許可する</button>
@@ -57,6 +77,28 @@
       <input type="checkbox" name="notification-type" value="browser" checked> ブラウザ通知
     </label>
 
+    <h2>「後でやる」を押したときのメッセージ</h2>
+    <p>気分に合わせて、後回しにしたときの言葉のトーンを選べます。</p>
+    <label>
+      <input type="radio" name="message-type" value="gentle"> 優しい
+    </label>
+    <br>
+    <label>
+      <input type="radio" name="message-type" value="normal" checked> 普通
+    </label>
+    <br>
+    <label>
+      <input type="radio" name="message-type" value="strict"> 厳しめ
+    </label>
+    <br>
+    <label>
+      <input type="radio" name="message-type" value="cheer"> 応援
+    </label>
+
+    <h2>色ラベルの名前</h2>
+    <p>色ごとに好きな名前を付けられます（例：緑→家事）。</p>
+    <div id="label-name-list"></div>
+
     <h2>その他</h2>
     <label>
       <input type="checkbox" name="enable-notification" value="enabled" checked> 通知を有効にする
@@ -91,7 +133,9 @@
 
   <script type="module">
     import { requireAuth, logout } from "./auth-guard.js";
-    import { loadUserData, saveNotificationSettings, saveFcmToken } from "./user-data.js";
+    import { initNavDrawer } from "./nav-drawer.js";
+    import { loadUserData, saveNotificationSettings, saveLabelNames, saveFcmToken } from "./user-data.js";
+    import { TASK_LABELS } from "./task-labels.js";
     import { app } from "./firebase-init.js";
     import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging.js";
     import { VAPID_KEY } from "./fcm-config.js";
@@ -129,7 +173,7 @@
       }
 
       if (isIosDevice() && !isStandaloneDisplayMode()) {
-        iosBanner.style.display = 'block';
+        iosBanner.style.display = 'flex';
         return;
       }
 
@@ -137,17 +181,25 @@
       updatePermissionStatus();
 
       document.getElementById('request-permission-button').addEventListener('click', async () => {
+        const statusEl = document.getElementById('permission-status');
         try {
           const permission = await Notification.requestPermission();
           updatePermissionStatus();
 
           if (permission === 'granted') {
+            const swRegistration = await navigator.serviceWorker.register("firebase-messaging-sw.js");
+            await navigator.serviceWorker.ready;
             const messaging = getMessaging(app);
-            const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-            if (token) await saveFcmToken(currentUser.uid, token);
+            const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swRegistration });
+            if (token) {
+              await saveFcmToken(currentUser.uid, token);
+            } else {
+              statusEl.textContent = 'トークンの取得に失敗しました。時間をおいて再度お試しください。';
+            }
           }
         } catch (error) {
           console.error("通知許可またはトークン取得でエラー:", error);
+          statusEl.textContent = `通知の設定でエラーが発生しました: ${error.message || error}`;
         }
       });
     }
@@ -197,10 +249,50 @@
         });
       }
 
+      if (settings.messageType) {
+        const messageTypeInput = document.querySelector(`input[name="message-type"][value="${settings.messageType}"]`);
+        if (messageTypeInput) messageTypeInput.checked = true;
+      }
+
       const enableCheckbox = document.querySelector('input[name="enable-notification"]');
+
       if (enableCheckbox && typeof settings.enabled === 'boolean') {
         enableCheckbox.checked = settings.enabled;
       }
+    }
+
+    const CUSTOMIZABLE_LABEL_KEYS = Object.keys(TASK_LABELS).filter((key) => key !== 'none');
+
+    function renderLabelNameInputs(labelNames) {
+      const list = document.getElementById('label-name-list');
+      list.innerHTML = '';
+
+      CUSTOMIZABLE_LABEL_KEYS.forEach((key) => {
+        const row = document.createElement('div');
+        row.className = 'label-name-row';
+
+        const dot = document.createElement('span');
+        dot.className = 'color-dot';
+        dot.style.background = TASK_LABELS[key].color;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.dataset.labelKey = key;
+        input.value = (labelNames && labelNames[key]) || TASK_LABELS[key].name;
+
+        row.appendChild(dot);
+        row.appendChild(input);
+        list.appendChild(row);
+      });
+    }
+
+    function collectLabelNames() {
+      const labelNames = {};
+      document.querySelectorAll('#label-name-list input[data-label-key]').forEach((input) => {
+        const key = input.dataset.labelKey;
+        labelNames[key] = input.value.trim() || TASK_LABELS[key].name;
+      });
+      return labelNames;
     }
 
     function collectExcludeTimes() {
@@ -216,6 +308,7 @@
 
     async function init() {
       currentUser = await requireAuth();
+      initNavDrawer();
       renderUserInfo(currentUser);
       initPushNotificationSection();
 
@@ -223,20 +316,44 @@
       if (userData && userData.notificationSettings) {
         populateSettingsForm(userData.notificationSettings);
       }
+      renderLabelNameInputs(userData && userData.labelNames);
     }
 
     document.getElementById('settings-form').addEventListener('submit', async (event) => {
       event.preventDefault();
 
+      const startTime = document.getElementById('start-time').value;
+      const endTime = document.getElementById('end-time').value;
+      const excludeTimes = collectExcludeTimes();
+
+      const errors = [];
+      if (startTime && endTime && startTime >= endTime) {
+        errors.push('・「通知していい時間帯」は開始時刻より終了時刻を後にしてください（日をまたぐ設定には対応していません）');
+      }
+      excludeTimes.forEach((range, i) => {
+        if (range.start >= range.end) {
+          errors.push(`・「通知を止めたい時間」${i + 1}件目は開始時刻より終了時刻を後にしてください（日をまたぐ設定には対応していません）`);
+        }
+      });
+
+      if (errors.length > 0) {
+        alert('保存できませんでした：\n\n' + errors.join('\n'));
+        return;
+      }
+
+      const checkedMessageType = document.querySelector('input[name="message-type"]:checked');
+
       const settings = {
-        startTime: document.getElementById('start-time').value,
-        endTime: document.getElementById('end-time').value,
-        excludeTimes: collectExcludeTimes(),
+        startTime,
+        endTime,
+        excludeTimes,
         notificationTypes: Array.from(document.querySelectorAll('input[name="notification-type"]:checked')).map((cb) => cb.value),
+        messageType: checkedMessageType ? checkedMessageType.value : 'normal',
         enabled: document.querySelector('input[name="enable-notification"]').checked
       };
 
       await saveNotificationSettings(currentUser.uid, settings);
+      await saveLabelNames(currentUser.uid, collectLabelNames());
       alert('保存しました');
     });
 
@@ -253,17 +370,17 @@
     <span>Home</span>
   </a>
 
-  <a href="task-form.html">
-    <span class="icon">➕</span>
-    <span>Add</span>
-  </a>
-
   <a href="task-list.html">
     <span class="icon">📋</span>
     <span>List</span>
   </a>
 
-  <a href="notification-settings.html">
+  <a href="atodeyaru.html">
+    <span class="icon">🕒</span>
+    <span>あとで</span>
+  </a>
+
+  <a href="notification-settings.html" class="is-active">
     <span class="icon">⚙️</span>
     <span>Setting</span>
   </a>
