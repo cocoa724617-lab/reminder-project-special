@@ -1,6 +1,51 @@
 const RECENT_DAYS = 7;
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
+export const STATUS_DEFINITIONS = {
+  selfManagementMaster: {
+    key: 'selfManagementMaster',
+    name: 'セルフマネジメントマスター',
+    image: 'assets/status/self_management_master.png',
+    description: 'タスクを計画的に登録し、高い達成率を維持できています。'
+  },
+  routineMaster: {
+    key: 'routineMaster',
+    name: 'ルーティーンマスター',
+    image: 'assets/status/routine_master.png',
+    description: '同じタスクを継続して達成できています。'
+  },
+  lazyPerson: {
+    key: 'lazyPerson',
+    name: '怠惰な人',
+    image: 'assets/status/lazy_person.png',
+    description: '登録したタスクの達成率がかなり低い状態です。まずは小さなタスクから達成していきましょう。'
+  },
+  procrastinationDemon: {
+    key: 'procrastinationDemon',
+    name: '先延ばし大魔神',
+    image: 'assets/status/procrastination_demon.png',
+    description: '後でやる機能をかなり多く使っています。次にやる時間を決めて、少しずつ進めましょう。'
+  },
+  forgetfulAlien: {
+    key: 'forgetfulAlien',
+    name: 'うっかり星人',
+    image: 'assets/status/forgetful_alien.png',
+    description: 'たまにタスクを忘れてしまっているようです。通知をうまく活用しましょう。'
+  },
+  tooBusyPerson: {
+    key: 'tooBusyPerson',
+    name: '猫の手も借りたい人',
+    image: 'assets/status/too_busy_person.png',
+    description: 'タスク量が多く、こなしきれない状態です。優先順位をつけて整理しましょう。'
+  },
+  vacationMode: {
+    key: 'vacationMode',
+    name: 'バカンス中？',
+    image: 'assets/status/vacation_mode.png',
+    description: '最近タスクがほとんど登録されていません。まずはタスクを登録してみましょう。'
+  }
+};
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -112,6 +157,11 @@ function safeDivide(numerator, denominator) {
   return numerator / denominator;
 }
 
+function safeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 function round(value, digits = 4) {
   if (!Number.isFinite(value)) return 0;
   const factor = 10 ** digits;
@@ -162,6 +212,22 @@ function getRoutineCompletedTaskNames(recentCompletedTasks) {
     .sort((a, b) => a.localeCompare(b, 'ja'));
 }
 
+function copyStatus(key) {
+  return { ...STATUS_DEFINITIONS[key] };
+}
+
+function getStatsArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function getAverageRegisteredTasksPerDay(stats) {
+  if (!stats || typeof stats !== 'object') return 0;
+  if (Number.isFinite(Number(stats.averageRegisteredTasksPerDay))) {
+    return safeNumber(stats.averageRegisteredTasksPerDay);
+  }
+  return safeNumber(stats.averageTasksPerDay);
+}
+
 export function computeUserStatusStats(tasks, completedTasks, now = new Date()) {
   const activeTasks = asArray(tasks);
   const completedTaskList = asArray(completedTasks);
@@ -185,6 +251,7 @@ export function computeUserStatusStats(tasks, completedTasks, now = new Date()) 
   const postponedRecentTasksCount = recentTaskPool
     .filter((task) => getLaterCount(task) > 0)
     .length;
+  const totalLaterCount = recentTaskPool.reduce((sum, task) => sum + getLaterCount(task), 0);
 
   const completionDenominator = recentRegisteredTasksCount + weeklyCompletedCount;
 
@@ -194,10 +261,72 @@ export function computeUserStatusStats(tasks, completedTasks, now = new Date()) 
     todayCompletedCount,
     weeklyCompletedCount,
     averageTasksPerDay: round(safeDivide(weeklyCompletedCount, RECENT_DAYS), 2),
+    averageRegisteredTasksPerDay: round(safeDivide(recentRegisteredTasksCount + weeklyCompletedCount, RECENT_DAYS), 2),
     completionRate: round(safeDivide(weeklyCompletedCount, completionDenominator), 4),
     postponeRate: round(safeDivide(postponedRecentTasksCount, recentTaskPool.length), 4),
+    totalLaterCount,
     postponedCompletedCount: recentCompletedTasks.filter((task) => getLaterCount(task) > 0).length,
     bestWeekdays: getBestWeekdays(recentCompletedTasks),
     routineCompletedTaskNames: getRoutineCompletedTaskNames(recentCompletedTasks)
   };
+}
+
+export function getUserStatusesFromStats(stats) {
+  const safeStats = stats && typeof stats === 'object' ? stats : {};
+  const totalTasks = Math.max(0, safeNumber(safeStats.totalTasks));
+  const averageRegisteredTasksPerDay = getAverageRegisteredTasksPerDay(safeStats);
+  const completionRate = Math.max(0, safeNumber(safeStats.completionRate));
+  const postponeRate = Math.max(0, safeNumber(safeStats.postponeRate));
+  const totalLaterCount = Math.max(
+    0,
+    safeNumber(safeStats.totalLaterCount, safeNumber(safeStats.postponedCompletedCount))
+  );
+  const routineCompletedTaskNames = getStatsArray(safeStats.routineCompletedTaskNames);
+
+  if (averageRegisteredTasksPerDay < 1) {
+    return [copyStatus('vacationMode')];
+  }
+
+  const statuses = [];
+
+  if (
+    averageRegisteredTasksPerDay >= 4
+    && completionRate >= 0.9
+    && postponeRate < 0.1
+  ) {
+    statuses.push(copyStatus('selfManagementMaster'));
+  }
+
+  if (routineCompletedTaskNames.length > 0) {
+    statuses.push(copyStatus('routineMaster'));
+  }
+
+  const isLazyPerson = totalTasks >= 3 && completionRate < 0.3;
+  if (isLazyPerson) {
+    statuses.push(copyStatus('lazyPerson'));
+  }
+
+  if (postponeRate >= 0.5 && (totalTasks >= 3 || totalLaterCount >= 3)) {
+    statuses.push(copyStatus('procrastinationDemon'));
+  }
+
+  if (!isLazyPerson && totalTasks >= 3 && completionRate >= 0.3 && completionRate < 0.6) {
+    statuses.push(copyStatus('forgetfulAlien'));
+  }
+
+  if (
+    !isLazyPerson
+    && averageRegisteredTasksPerDay >= 4
+    && completionRate >= 0.3
+    && completionRate < 0.7
+  ) {
+    statuses.push(copyStatus('tooBusyPerson'));
+  }
+
+  return statuses;
+}
+
+export function getUserStatuses(tasks, completedTasks, now = new Date()) {
+  const stats = computeUserStatusStats(tasks, completedTasks, now);
+  return getUserStatusesFromStats(stats);
 }
