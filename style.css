@@ -790,6 +790,174 @@ body.notification-settings-page {
   padding: 0 2px;
 }
 
+.user-status-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.user-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.user-status-item {
+  min-width: 0;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, auto) auto;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.user-status-item-wide {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.user-status-value {
+  min-width: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.user-status-label {
+  grid-column: 1 / -1;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.user-status-unit {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.user-status-text {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.user-status-message {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.current-status-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.current-status-card {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.current-status-card:first-child {
+  grid-column: 1 / -1;
+  padding: 24px 22px 26px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+  border-color: rgba(47, 111, 237, 0.34);
+  background: linear-gradient(180deg, var(--surface) 0%, rgba(47, 111, 237, 0.06) 100%);
+  box-shadow: 0 12px 34px rgba(20, 20, 24, 0.08);
+}
+
+.current-status-image {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  object-fit: contain;
+}
+
+.current-status-card:first-child .current-status-image {
+  width: 190px;
+  height: 190px;
+  flex: 0 0 auto;
+  max-width: 72%;
+}
+
+.current-status-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.current-status-card:first-child .current-status-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 560px;
+  flex: 0 1 auto;
+}
+
+.current-status-name {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.current-status-card:first-child .current-status-name {
+  margin-bottom: 8px;
+  font-size: 22px;
+}
+
+.current-status-description,
+.current-status-empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.current-status-card:first-child .current-status-description {
+  font-size: 15px;
+  line-height: 1.75;
+  max-width: 520px;
+}
+
+.current-status-empty {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+}
+
 .next-task-card {
   border: 1.5px solid var(--accent);
 }
@@ -1113,6 +1281,58 @@ p {
   .task-actions button,
   .task-actions a {
     flex-basis: 100%;
+  }
+
+  .user-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .user-status-item-wide {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .user-status-value {
+    font-size: 22px;
+  }
+
+  .user-status-text {
+    text-align: left;
+  }
+
+  .current-status-list {
+    grid-template-columns: 1fr;
+  }
+
+  .current-status-card {
+    align-items: flex-start;
+  }
+
+  .current-status-image {
+    width: 56px;
+    height: 56px;
+    flex-basis: 56px;
+  }
+
+  .current-status-card:first-child {
+    padding: 20px 16px 22px;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .current-status-card:first-child .current-status-image {
+    width: 136px;
+    height: 136px;
+    max-width: 68vw;
+  }
+
+  .current-status-card:first-child .current-status-name {
+    font-size: 20px;
+  }
+
+  .current-status-card:first-child .current-status-description {
+    font-size: 14px;
+    line-height: 1.7;
   }
 
   .atodeyaru-main {
