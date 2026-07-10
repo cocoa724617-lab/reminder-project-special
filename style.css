@@ -868,7 +868,7 @@ body.notification-settings-page {
 .current-status-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .current-status-card {
@@ -882,6 +882,19 @@ body.notification-settings-page {
   gap: 14px;
 }
 
+.current-status-card:first-child {
+  grid-column: 1 / -1;
+  padding: 24px 22px 26px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+  border-color: rgba(47, 111, 237, 0.34);
+  background: linear-gradient(180deg, var(--surface) 0%, rgba(47, 111, 237, 0.06) 100%);
+  box-shadow: 0 12px 34px rgba(20, 20, 24, 0.08);
+}
+
 .current-status-image {
   width: 64px;
   height: 64px;
@@ -889,8 +902,24 @@ body.notification-settings-page {
   object-fit: contain;
 }
 
+.current-status-card:first-child .current-status-image {
+  width: 190px;
+  height: 190px;
+  flex: 0 0 auto;
+  max-width: 72%;
+}
+
 .current-status-body {
   min-width: 0;
+  flex: 1;
+}
+
+.current-status-card:first-child .current-status-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 560px;
+  flex: 0 1 auto;
 }
 
 .current-status-name {
@@ -899,6 +928,11 @@ body.notification-settings-page {
   font-size: 16px;
   font-weight: 800;
   line-height: 1.35;
+}
+
+.current-status-card:first-child .current-status-name {
+  margin-bottom: 8px;
+  font-size: 22px;
 }
 
 .current-status-description,
@@ -910,11 +944,18 @@ body.notification-settings-page {
   line-height: 1.55;
 }
 
+.current-status-card:first-child .current-status-description {
+  font-size: 15px;
+  line-height: 1.75;
+  max-width: 520px;
+}
+
 .current-status-empty {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px;
+  text-align: center;
 }
 
 .next-task-card {
@@ -1271,6 +1312,27 @@ p {
     width: 56px;
     height: 56px;
     flex-basis: 56px;
+  }
+
+  .current-status-card:first-child {
+    padding: 20px 16px 22px;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .current-status-card:first-child .current-status-image {
+    width: 136px;
+    height: 136px;
+    max-width: 68vw;
+  }
+
+  .current-status-card:first-child .current-status-name {
+    font-size: 20px;
+  }
+
+  .current-status-card:first-child .current-status-description {
+    font-size: 14px;
+    line-height: 1.7;
   }
 
   .atodeyaru-main {
