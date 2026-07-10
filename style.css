@@ -865,6 +865,58 @@ body.notification-settings-page {
   line-height: 1.55;
 }
 
+.current-status-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.current-status-card {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.current-status-image {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  object-fit: contain;
+}
+
+.current-status-body {
+  min-width: 0;
+}
+
+.current-status-name {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.current-status-description,
+.current-status-empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.current-status-empty {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
 .next-task-card {
   border: 1.5px solid var(--accent);
 }
@@ -1205,6 +1257,20 @@ p {
 
   .user-status-text {
     text-align: left;
+  }
+
+  .current-status-list {
+    grid-template-columns: 1fr;
+  }
+
+  .current-status-card {
+    align-items: flex-start;
+  }
+
+  .current-status-image {
+    width: 56px;
+    height: 56px;
+    flex-basis: 56px;
   }
 
   .atodeyaru-main {
