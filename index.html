@@ -39,6 +39,11 @@
   </div>
 
   <section id="home-screen" class="home-screen">
+    <section class="home-section" id="user-status-section">
+      <h2 class="home-section-title">今週の進み具合</h2>
+      <div id="user-status-card" class="user-status-card" aria-live="polite"></div>
+    </section>
+
     <section class="home-section" id="next-task-section" style="display:none;">
       <h2 class="home-section-title">次にやるタスク</h2>
       <div id="next-task-card"></div>
@@ -98,6 +103,7 @@
     import { getTaskLabel, applyLabelBar, setCustomLabelNames, normalizeImportance, IMPORTANCE_LABELS, normalizeUrgency, URGENCY_LABELS, REPEAT_LABELS, isRepeatingTask } from "./task-labels.js";
     import { loadUserData } from "./user-data.js";
     import { computeCompletionStats } from "./stats.js";
+    import { computeUserStatusStats } from "./user-status.js";
     import { celebrateCompletion } from "./celebrate.js";
 
     let currentUser = null;
@@ -107,6 +113,7 @@
     const nextTaskSection = document.getElementById('next-task-section');
     const nextTaskCardEl = document.getElementById('next-task-card');
     const homeStatsCardEl = document.getElementById('home-stats-card');
+    const userStatusCardEl = document.getElementById('user-status-card');
 
     function isLaterTask(task) {
       const status = String(task.status || '').trim().toLowerCase();
@@ -272,9 +279,11 @@
       render();
     }
 
-    async function renderHomeStats() {
-      const completedTasks = await loadCompletedTasks(currentUser.uid);
-      const stats = computeCompletionStats(completedTasks);
+    async function renderHomeStats(completedTasks) {
+      const completedTaskList = Array.isArray(completedTasks)
+        ? completedTasks
+        : await loadCompletedTasks(currentUser.uid);
+      const stats = computeCompletionStats(completedTaskList);
 
       homeStatsCardEl.innerHTML = `
         <div class="stat-tile">
@@ -289,6 +298,68 @@
           <span class="stat-tile-value">${stats.fromLaterCount}</span>
           <span class="stat-tile-label">あとでから完了</span>
         </div>
+      `;
+    }
+
+    function formatPercent(value) {
+      const percent = Number(value) * 100;
+      if (!Number.isFinite(percent)) return 0;
+      return Math.max(0, Math.min(100, Math.round(percent)));
+    }
+
+    function formatBestWeekdays(bestWeekdays) {
+      if (!Array.isArray(bestWeekdays) || bestWeekdays.length === 0) return 'まだ集計中';
+      return bestWeekdays.map((day) => `${day}曜日`).join(' / ');
+    }
+
+    function getUserStatusMessage(stats) {
+      if (stats.todayCompletedCount === 0) {
+        return '今日はまだ完了タスクがありません。まずは1つ進めてみましょう。';
+      }
+      if (stats.postponedCompletedCount > 0) {
+        return 'あとでにしたタスクも、最終的に完了できています。';
+      }
+      return '少しずつ進めていきましょう。';
+    }
+
+    function renderUserStatus(completedTasks) {
+      if (!userStatusCardEl) return;
+
+      const stats = computeUserStatusStats(tasks, completedTasks);
+      const completionRate = formatPercent(stats.completionRate);
+      const postponeRate = formatPercent(stats.postponeRate);
+
+      userStatusCardEl.innerHTML = `
+        <div class="user-status-grid">
+          <div class="user-status-item">
+            <span class="user-status-value">${stats.todayCompletedCount}</span>
+            <span class="user-status-label">今日の完了</span>
+            <span class="user-status-unit">個</span>
+          </div>
+          <div class="user-status-item">
+            <span class="user-status-value">${stats.weeklyCompletedCount}</span>
+            <span class="user-status-label">今週の完了</span>
+            <span class="user-status-unit">個</span>
+          </div>
+          <div class="user-status-item">
+            <span class="user-status-value">${stats.postponedCompletedCount}</span>
+            <span class="user-status-label">あとでから完了</span>
+            <span class="user-status-unit">個</span>
+          </div>
+          <div class="user-status-item user-status-item-wide">
+            <span class="user-status-label">よくできた曜日</span>
+            <span class="user-status-text">${formatBestWeekdays(stats.bestWeekdays)}</span>
+          </div>
+          <div class="user-status-item">
+            <span class="user-status-value">${completionRate}%</span>
+            <span class="user-status-label">達成率</span>
+          </div>
+          <div class="user-status-item">
+            <span class="user-status-value">${postponeRate}%</span>
+            <span class="user-status-label">後でやる使用率</span>
+          </div>
+        </div>
+        <p class="user-status-message">${getUserStatusMessage(stats)}</p>
       `;
     }
 
@@ -393,8 +464,10 @@
       const userData = await loadUserData(currentUser.uid);
       setCustomLabelNames(userData && userData.labelNames);
       tasks = await loadTasks(currentUser.uid);
+      const completedTasks = await loadCompletedTasks(currentUser.uid);
       render();
-      renderHomeStats();
+      renderUserStatus(completedTasks);
+      renderHomeStats(completedTasks);
       checkPopupNotifications();
     }
 

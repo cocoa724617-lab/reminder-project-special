@@ -790,6 +790,81 @@ body.notification-settings-page {
   padding: 0 2px;
 }
 
+.user-status-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.user-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.user-status-item {
+  min-width: 0;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, auto) auto;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.user-status-item-wide {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.user-status-value {
+  min-width: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.user-status-label {
+  grid-column: 1 / -1;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.user-status-unit {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.user-status-text {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.user-status-message {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
 .next-task-card {
   border: 1.5px solid var(--accent);
 }
@@ -1113,6 +1188,23 @@ p {
   .task-actions button,
   .task-actions a {
     flex-basis: 100%;
+  }
+
+  .user-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .user-status-item-wide {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .user-status-value {
+    font-size: 22px;
+  }
+
+  .user-status-text {
+    text-align: left;
   }
 
   .atodeyaru-main {
