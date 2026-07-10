@@ -29,6 +29,20 @@ export async function loadCompletedTasks(uid) {
   return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
 }
 
+// ホームや実績画面は直近数日分しか使わないため、履歴全件ではなく期間を絞って取得する
+export async function loadRecentCompletedTasks(uid, days = 14) {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+
+  const recentQuery = query(
+    collection(db, "users", uid, "completedTasks"),
+    where("deletedAt", ">=", Timestamp.fromDate(cutoff))
+  );
+  const snapshot = await getDocs(recentQuery);
+  return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+}
+
 export async function loadTask(uid, taskId) {
   const snap = await getDoc(doc(db, "users", uid, "tasks", taskId));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
@@ -88,6 +102,7 @@ function computeNextDueDate(dueDateStr, repeat) {
 export async function completeTask(uid, task) {
   // completedTasksのidはtask.idと分ける：繰り返しタスクは同じtask.idで何度も完了するため、履歴を上書きしないようにする
   const completedId = `${task.id}_${Date.now()}`;
+  const completedAt = new Date();
   await setDoc(doc(db, "users", uid, "completedTasks", completedId), {
     ...task,
     originalTaskId: task.id,
@@ -108,6 +123,8 @@ export async function completeTask(uid, task) {
   }
 
   await cancelPendingReminders(uid, task.id);
+
+  return { id: completedId, ...task, originalTaskId: task.id, deletedAt: completedAt };
 }
 
 export async function deleteTask(uid, taskId) {

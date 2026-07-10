@@ -81,14 +81,14 @@
   <script type="module">
     import { requireAuth } from "./auth-guard.js";
     import { initNavDrawer } from "./nav-drawer.js";
-    import { loadCompletedTasks } from "./tasks-data.js";
+    import { loadRecentCompletedTasks } from "./tasks-data.js";
     import { computeCompletionStats } from "./stats.js";
 
     async function init() {
       const currentUser = await requireAuth();
       initNavDrawer();
 
-      const completedTasks = await loadCompletedTasks(currentUser.uid);
+      const completedTasks = await loadRecentCompletedTasks(currentUser.uid);
       const stats = computeCompletionStats(completedTasks);
 
       document.getElementById('stat-today').textContent = stats.todayCount;

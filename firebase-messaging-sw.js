@@ -45,3 +45,55 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+
+// ==== ここから静的アセットのキャッシュ処理（通知処理とは独立・無関係） ====
+// 画像/アイコン/manifestはほぼ更新されないためキャッシュファーストで配信する。
+// HTML/JS/CSSやFirestore・FCM・認証など他オリジンへの通信は一切傍受せず、常に今まで通りネットワークへ流す。
+const STATIC_CACHE_NAME = "static-assets-v1";
+const PRECACHE_URLS = [
+  "icons/icon-192.png",
+  "icons/icon-512.png",
+  "manifest.webmanifest",
+  "assets/status/self_management_master.png",
+  "assets/status/routine_master.png",
+  "assets/status/lazy_person.png",
+  "assets/status/procrastination_demon.png",
+  "assets/status/forgetful_alien.png",
+  "assets/status/too_busy_person.png",
+  "assets/status/vacation_mode.png"
+];
+const PRECACHE_PATHS = new Set(
+  PRECACHE_URLS.map((path) => new URL(path, self.location.href).pathname)
+);
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(STATIC_CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())
+      .catch((error) => console.error("静的アセットのプリキャッシュに失敗:", error))
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys.filter((key) => key !== STATIC_CACHE_NAME).map((key) => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  if (!PRECACHE_PATHS.has(url.pathname)) return;
+
+  event.respondWith(
+    caches.match(request).then((cached) => cached || fetch(request))
+  );
+});

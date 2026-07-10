@@ -104,7 +104,7 @@
   <script type="module">
     import { requireAuth } from "./auth-guard.js";
     import { initNavDrawer } from "./nav-drawer.js";
-    import { loadTasks, loadCompletedTasks, completeTask as completeTaskInFirestore } from "./tasks-data.js";
+    import { loadTasks, loadRecentCompletedTasks, completeTask as completeTaskInFirestore } from "./tasks-data.js";
     import { getTaskLabel, applyLabelBar, setCustomLabelNames, normalizeImportance, IMPORTANCE_LABELS, normalizeUrgency, URGENCY_LABELS, REPEAT_LABELS, isRepeatingTask } from "./task-labels.js";
     import { loadUserData } from "./user-data.js";
     import { computeCompletionStats } from "./stats.js";
@@ -113,6 +113,7 @@
 
     let currentUser = null;
     let tasks = [];
+    let completedTasks = [];
 
     const todayTaskListEl = document.getElementById('today-task-list');
     const nextTaskSection = document.getElementById('next-task-section');
@@ -279,16 +280,20 @@
         if (checkbox) checkbox.checked = false;
         return;
       }
-      await completeTaskInFirestore(currentUser.uid, task);
+      const completedEntry = await completeTaskInFirestore(currentUser.uid, task);
       tasks = tasks.filter((t) => t.id !== task.id);
       celebrateCompletion();
       render();
+
+      completedTasks = [completedEntry, ...completedTasks];
+      renderUserStatus(completedTasks);
+      renderHomeStats(completedTasks);
     }
 
     async function renderHomeStats(completedTasks) {
       const completedTaskList = Array.isArray(completedTasks)
         ? completedTasks
-        : await loadCompletedTasks(currentUser.uid);
+        : await loadRecentCompletedTasks(currentUser.uid);
       const stats = computeCompletionStats(completedTaskList);
 
       homeStatsCardEl.innerHTML = `
@@ -520,7 +525,7 @@
       const userData = await loadUserData(currentUser.uid);
       setCustomLabelNames(userData && userData.labelNames);
       tasks = await loadTasks(currentUser.uid);
-      const completedTasks = await loadCompletedTasks(currentUser.uid);
+      completedTasks = await loadRecentCompletedTasks(currentUser.uid);
       render();
       renderUserStatus(completedTasks);
       renderHomeStats(completedTasks);
