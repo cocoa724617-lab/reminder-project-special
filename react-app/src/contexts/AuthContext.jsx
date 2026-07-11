@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "../services/firebase.js";
-
-const AuthContext = createContext(undefined);
+import { AuthContext } from "./authContextObject.js";
 
 // Firebase Authentication の状態を全画面から参照できるようにするプロバイダー。
 // currentUser / isLoading / logout をまとめて配る。
@@ -25,12 +24,4 @@ export function AuthProvider({ children }) {
   const value = { currentUser, isLoading, logout };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth は AuthProvider の内側で使ってください");
-  }
-  return context;
 }

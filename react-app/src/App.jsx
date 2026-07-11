@@ -1,11 +1,12 @@
 import { Routes, Route } from "react-router-dom";
-import { useAuth } from "./contexts/AuthContext.jsx";
+import { useAuth } from "./contexts/useAuth.js";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Layout from "./components/Layout.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
 import TaskListPage from "./pages/TaskListPage.jsx";
 import TaskFormPage from "./pages/TaskFormPage.jsx";
+import CompletedTasksPage from "./pages/CompletedTasksPage.jsx";
 import StatsPage from "./pages/StatsPage.jsx";
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/tasks" element={<TaskListPage />} />
           <Route path="/tasks/new" element={<TaskFormPage />} />
+          <Route path="/completed" element={<CompletedTasksPage />} />
           <Route path="/stats" element={<StatsPage />} />
         </Route>
       </Route>

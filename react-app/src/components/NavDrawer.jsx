@@ -1,15 +1,9 @@
 import { Link } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext.jsx";
+import { useAuth } from "../contexts/useAuth.js";
 
 // 既存アプリの .nav-drawer を見た目・開閉動作だけ再現したもの。
-// まだページが無い項目は、元アプリの data-disabled="true" + soon-badge の表現をそのまま踏襲する。
 function NavDrawer({ isOpen, onClose }) {
   const { logout } = useAuth();
-
-  function handleDisabledClick(event) {
-    event.preventDefault();
-    onClose();
-  }
 
   async function handleLogout(event) {
     event.preventDefault();
@@ -29,10 +23,9 @@ function NavDrawer({ isOpen, onClose }) {
         </div>
         <ul className="nav-drawer-list">
           <li>
-            <a href="#" data-disabled="true" onClick={handleDisabledClick}>
+            <Link to="/completed" onClick={onClose}>
               完了済みタスク
-              <span className="soon-badge">準備中</span>
-            </a>
+            </Link>
           </li>
           <li>
             <Link to="/stats" onClick={onClose}>

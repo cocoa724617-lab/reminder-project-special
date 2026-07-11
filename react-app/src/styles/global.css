@@ -288,6 +288,194 @@ button:hover {
   font-size: 15px;
 }
 
+/* ===== タスク一覧・完了済みタスク ===== */
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  max-width: 720px;
+  margin: 0 auto 18px;
+}
+
+.filter-bar select {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-list-empty {
+  max-width: 480px;
+  margin: 40px auto;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.task-card {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto 18px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 4px 16px rgba(20, 20, 24, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.task-card.task-card-compact {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+}
+
+.task-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-info h3 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.task-card-compact .task-info h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.task-info p {
+  margin: 5px 0;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.task-remind {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+
+.task-memo {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.status-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.status-pill.status-pending {
+  background: rgba(47, 111, 237, 0.12);
+  color: var(--accent-dark);
+}
+
+.status-pill.status-later {
+  background: rgba(154, 107, 10, 0.14);
+  color: var(--later);
+}
+
+.meta-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--text-dim);
+}
+
+.meta-pill-importance-high {
+  background: rgba(229, 72, 77, 0.12);
+  color: var(--danger);
+}
+
+.meta-pill-label {
+  background: var(--surface-alt);
+  color: var(--label-color);
+  font-weight: 800;
+}
+
+.color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.task-title-dot {
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.task-actions button,
+.task-actions a {
+  flex: 1 1 120px;
+  width: auto;
+  min-width: 120px;
+  max-width: none;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.task-actions button:disabled {
+  background-color: var(--surface-alt);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+/* ===== 完了時の達成メッセージ（トースト） ===== */
+.completion-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+  transform: translate(-50%, 12px);
+  background: var(--text);
+  color: var(--surface);
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 50;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.completion-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 /* ===== 共通ページ本文 ===== */
 /* BottomNav が position:fixed のため、本文の最後がそこに隠れないよう下部に余白を作る。
    Layout.jsx の <main> に付与し、各ページ個別に用意する必要はない。 */

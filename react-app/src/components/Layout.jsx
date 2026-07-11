@@ -9,6 +9,7 @@ const PAGE_TITLES = {
   "/": "ホーム",
   "/tasks": "タスク一覧",
   "/tasks/new": "タスク登録 / 編集",
+  "/completed": "完了済みタスク",
   "/stats": "実績・記録",
 };
 

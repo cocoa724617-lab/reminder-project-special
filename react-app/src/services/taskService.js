@@ -1,5 +1,34 @@
-import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  updateDoc,
+  query,
+  where,
+  serverTimestamp,
+  Timestamp,
+} from "firebase/firestore";
 import { db } from "./firebase.js";
+
+function tasksCollection(uid) {
+  return collection(db, "users", uid, "tasks");
+}
+
+// 既存 tasks-data.js の loadTasks と同じ仕様：ユーザーの未完了タスク一覧（tasksサブコレクション全件）を取得する。
+export async function fetchTasks(uid) {
+  const snapshot = await getDocs(tasksCollection(uid));
+  return snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id }));
+}
+
+// 既存 tasks-data.js の loadCompletedTasks と同じ仕様：完了済みタスクの全履歴を取得する
+// （実績画面用の fetchRecentCompletedTasks とは異なり、期間で絞り込まない）。
+export async function fetchCompletedTasks(uid) {
+  const snapshot = await getDocs(collection(db, "users", uid, "completedTasks"));
+  return snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id }));
+}
 
 // 既存 tasks-data.js の loadRecentCompletedTasks と同じ仕様：
 // 実績画面は履歴全件ではなく直近 days 日分だけを使うため、期間を絞って取得する。
@@ -13,5 +42,85 @@ export async function fetchRecentCompletedTasks(uid, days = 14) {
     where("deletedAt", ">=", Timestamp.fromDate(cutoff)),
   );
   const snapshot = await getDocs(recentQuery);
-  return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  return snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id }));
+}
+
+// 既存 tasks-data.js の cancelPendingReminders と同じ仕様：未通知のリマインダーを削除する。
+async function cancelPendingReminders(uid, taskId) {
+  const remindersQuery = query(
+    collection(db, "reminders"),
+    where("uid", "==", uid),
+    where("taskId", "==", taskId),
+    where("notified", "==", false),
+  );
+  const snapshot = await getDocs(remindersQuery);
+  await Promise.all(snapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)));
+}
+
+function isRepeatingTask(task) {
+  return !!task.repeat && task.repeat !== "none";
+}
+
+// 既存 tasks-data.js の computeNextDueDate と同じ仕様：繰り返しタスクの次回期限を計算する。
+function computeNextDueDate(dueDateStr, repeat) {
+  const base = dueDateStr ? new Date(`${dueDateStr}T00:00:00`) : new Date();
+  if (repeat === "daily") base.setDate(base.getDate() + 1);
+  else if (repeat === "weekly") base.setDate(base.getDate() + 7);
+  else if (repeat === "monthly") base.setMonth(base.getMonth() + 1);
+  else if (repeat === "yearly") base.setFullYear(base.getFullYear() + 1);
+
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, "0");
+  const d = String(base.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// 既存 tasks-data.js の completeTask と同じ仕様：
+// completedTasks へ履歴を書き込み、繰り返しタスクなら次回期限へリセット、そうでなければ tasks から削除し、
+// 保留中のリマインダーも合わせてキャンセルする。
+export async function completeTask(uid, task) {
+  const completedId = `${task.id}_${Date.now()}`;
+  const completedAt = new Date();
+  await setDoc(doc(db, "users", uid, "completedTasks", completedId), {
+    ...task,
+    originalTaskId: task.id,
+    deletedAt: serverTimestamp(),
+  });
+
+  if (isRepeatingTask(task)) {
+    await updateDoc(doc(db, "users", uid, "tasks", task.id), {
+      status: "未完了",
+      dueDate: computeNextDueDate(task.dueDate, task.repeat),
+      laterCount: 0,
+      lastPostponedAt: null,
+      laterTime: null,
+      updatedAt: serverTimestamp(),
+    });
+  } else {
+    await deleteDoc(doc(db, "users", uid, "tasks", task.id));
+  }
+
+  await cancelPendingReminders(uid, task.id);
+
+  return { ...task, id: completedId, originalTaskId: task.id, deletedAt: completedAt };
+}
+
+// 既存 tasks-data.js の deleteTask と同じ仕様：タスク本体を削除し、保留中のリマインダーもキャンセルする。
+export async function deleteTask(uid, taskId) {
+  await deleteDoc(doc(db, "users", uid, "tasks", taskId));
+  await cancelPendingReminders(uid, taskId);
+}
+
+// 完了済みタスクの削除。
+// 実装上の仮定：既存アプリの completed-tasks.html にはこの操作自体が存在しないため、
+// 一番素直な実装（ドキュメントを削除するだけ）とした。completeTask の時点で該当タスクの
+// 保留中リマインダーは既にキャンセル済みのため、ここでの追加のリマインダー処理は行わない。
+export async function deleteCompletedTask(uid, completedTaskId) {
+  await deleteDoc(doc(db, "users", uid, "completedTasks", completedTaskId));
+}
+
+// 既存 user-data.js の loadUserData と同じ場所（users/{uid}）から labelNames だけを取り出す。
+export async function fetchUserLabelNames(uid) {
+  const snap = await getDoc(doc(db, "users", uid));
+  return snap.exists() ? snap.data().labelNames || {} : {};
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { signInWithPopup } from "firebase/auth";
 import { Navigate, useNavigate } from "react-router-dom";
 import { auth, googleProvider } from "../services/firebase.js";
-import { useAuth } from "../contexts/AuthContext.jsx";
+import { useAuth } from "../contexts/useAuth.js";
 
 // 既存 login.html の Google ログインだけを再現したもの。
 // メールログイン・新規登録・パスワードリセットはまだ実装しない。
