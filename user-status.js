@@ -43,6 +43,12 @@ export const STATUS_DEFINITIONS = {
     name: 'バカンス中？',
     image: 'assets/status/vacation_mode.png',
     description: '最近タスクがほとんど登録されていません。まずはタスクを登録してみましょう。'
+  },
+  normalMode: {
+    key: 'normalMode',
+    name: '通常運転中',
+    image: '',
+    description: '少しずつタスクを進めていきましょう。'
   }
 };
 
@@ -107,15 +113,23 @@ function firstDateFrom(task, keys) {
 }
 
 function getCompletedDate(task) {
-  return firstDateFrom(task, ['completedAt', 'deletedAt', 'updatedAt', 'finishedAt', 'finishedDate']);
+  return firstDateFrom(task, ['completedAt', 'deletedAt', 'finishedAt', 'finishedDate']);
 }
 
 function getRegisteredDate(task) {
-  return firstDateFrom(task, ['createdAt', 'registeredAt', 'createdDate', 'updatedAt']);
+  return firstDateFrom(task, ['createdAt', 'registeredAt', 'createdDate']);
+}
+
+function getDueDate(task) {
+  return firstDateFrom(task, ['dueDate', 'notifyDate', 'time']);
 }
 
 function getTaskName(task) {
-  return String((task && (task.name || task.title)) || '').trim();
+  const name = String((task && task.name) || '').trim();
+  if (name) return name;
+
+  const title = String((task && task.title) || '').trim();
+  return title || '名称未設定';
 }
 
 function getLaterCount(task) {
@@ -176,6 +190,41 @@ function getRecentCompletedTasks(completedTasks, rangeStart, rangeEnd) {
   return completedTasks.filter((task) => inRange(getCompletedDate(task), rangeStart, rangeEnd));
 }
 
+function isCompletionTargetTask(task, rangeStart, rangeEnd) {
+  return inRange(getDueDate(task), rangeStart, rangeEnd)
+    || inRange(getRegisteredDate(task), rangeStart, rangeEnd)
+    || inRange(getCompletedDate(task), rangeStart, rangeEnd);
+}
+
+function getTaskKey(source, task, index) {
+  const id = task && task.id;
+  if (id) return `${source}:${id}`;
+
+  const originalTaskId = task && task.originalTaskId;
+  if (originalTaskId) return `${source}:original:${originalTaskId}:${index}`;
+
+  return `${source}:index:${index}`;
+}
+
+function addCompletionTargetTask(targetTaskKeys, source, task, index, rangeStart, rangeEnd) {
+  if (!isCompletionTargetTask(task, rangeStart, rangeEnd)) return;
+  targetTaskKeys.add(getTaskKey(source, task, index));
+}
+
+function countCompletionTargetTasks(activeTasks, completedTasks, rangeStart, rangeEnd) {
+  const targetTaskKeys = new Set();
+
+  activeTasks.forEach((task, index) => {
+    addCompletionTargetTask(targetTaskKeys, 'active', task, index, rangeStart, rangeEnd);
+  });
+
+  completedTasks.forEach((task, index) => {
+    addCompletionTargetTask(targetTaskKeys, 'completed', task, index, rangeStart, rangeEnd);
+  });
+
+  return targetTaskKeys.size;
+}
+
 function getBestWeekdays(recentCompletedTasks) {
   const counts = Array(WEEKDAY_LABELS.length).fill(0);
 
@@ -228,6 +277,11 @@ function getAverageRegisteredTasksPerDay(stats) {
   return safeNumber(stats.averageTasksPerDay);
 }
 
+function getSafeRate(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, number) : null;
+}
+
 export function computeUserStatusStats(tasks, completedTasks, now = new Date()) {
   const activeTasks = asArray(tasks);
   const completedTaskList = asArray(completedTasks);
@@ -239,7 +293,8 @@ export function computeUserStatusStats(tasks, completedTasks, now = new Date()) 
   const recentEnd = tomorrowStart;
 
   const recentCompletedTasks = getRecentCompletedTasks(completedTaskList, recentStart, recentEnd);
-  const recentRegisteredTasksCount = countRecentRegisteredTasks(activeTasks, recentStart, recentEnd);
+  const allStatusTasks = activeTasks.concat(completedTaskList);
+  const recentRegisteredTasksCount = countRecentRegisteredTasks(allStatusTasks, recentStart, recentEnd);
   const weeklyCompletedCount = recentCompletedTasks.length;
   const todayCompletedCount = recentCompletedTasks
     .filter((task) => isSameDay(getCompletedDate(task), currentDate))
@@ -253,7 +308,10 @@ export function computeUserStatusStats(tasks, completedTasks, now = new Date()) 
     .length;
   const totalLaterCount = recentTaskPool.reduce((sum, task) => sum + getLaterCount(task), 0);
 
-  const completionDenominator = recentRegisteredTasksCount + weeklyCompletedCount;
+  const completionTargetCount = countCompletionTargetTasks(activeTasks, completedTaskList, recentStart, recentEnd);
+  const completionRate = completionTargetCount > 0
+    ? round(weeklyCompletedCount / completionTargetCount, 4)
+    : null;
 
   return {
     totalTasks: activeTasks.length + completedTaskList.length,
@@ -261,8 +319,9 @@ export function computeUserStatusStats(tasks, completedTasks, now = new Date()) 
     todayCompletedCount,
     weeklyCompletedCount,
     averageTasksPerDay: round(safeDivide(weeklyCompletedCount, RECENT_DAYS), 2),
-    averageRegisteredTasksPerDay: round(safeDivide(recentRegisteredTasksCount + weeklyCompletedCount, RECENT_DAYS), 2),
-    completionRate: round(safeDivide(weeklyCompletedCount, completionDenominator), 4),
+    averageRegisteredTasksPerDay: round(safeDivide(recentRegisteredTasksCount, RECENT_DAYS), 2),
+    completionTargetCount,
+    completionRate,
     postponeRate: round(safeDivide(postponedRecentTasksCount, recentTaskPool.length), 4),
     totalLaterCount,
     postponedCompletedCount: recentCompletedTasks.filter((task) => getLaterCount(task) > 0).length,
@@ -275,12 +334,9 @@ export function getUserStatusesFromStats(stats) {
   const safeStats = stats && typeof stats === 'object' ? stats : {};
   const totalTasks = Math.max(0, safeNumber(safeStats.totalTasks));
   const averageRegisteredTasksPerDay = getAverageRegisteredTasksPerDay(safeStats);
-  const completionRate = Math.max(0, safeNumber(safeStats.completionRate));
+  const completionRate = getSafeRate(safeStats.completionRate);
   const postponeRate = Math.max(0, safeNumber(safeStats.postponeRate));
-  const totalLaterCount = Math.max(
-    0,
-    safeNumber(safeStats.totalLaterCount, safeNumber(safeStats.postponedCompletedCount))
-  );
+  const totalLaterCount = Math.max(0, safeNumber(safeStats.totalLaterCount));
   const routineCompletedTaskNames = getStatsArray(safeStats.routineCompletedTaskNames);
 
   if (averageRegisteredTasksPerDay < 1) {
@@ -291,6 +347,7 @@ export function getUserStatusesFromStats(stats) {
 
   if (
     averageRegisteredTasksPerDay >= 4
+    && completionRate !== null
     && completionRate >= 0.9
     && postponeRate < 0.1
   ) {
@@ -301,7 +358,9 @@ export function getUserStatusesFromStats(stats) {
     statuses.push(copyStatus('routineMaster'));
   }
 
-  const isLazyPerson = totalTasks >= 3 && completionRate < 0.3;
+  const isLazyPerson = totalTasks >= 3
+    && completionRate !== null
+    && completionRate < 0.3;
   if (isLazyPerson) {
     statuses.push(copyStatus('lazyPerson'));
   }
@@ -310,20 +369,27 @@ export function getUserStatusesFromStats(stats) {
     statuses.push(copyStatus('procrastinationDemon'));
   }
 
-  if (!isLazyPerson && totalTasks >= 3 && completionRate >= 0.3 && completionRate < 0.6) {
+  if (
+    !isLazyPerson
+    && totalTasks >= 3
+    && completionRate !== null
+    && completionRate >= 0.3
+    && completionRate < 0.6
+  ) {
     statuses.push(copyStatus('forgetfulAlien'));
   }
 
   if (
     !isLazyPerson
     && averageRegisteredTasksPerDay >= 4
+    && completionRate !== null
     && completionRate >= 0.3
     && completionRate < 0.7
   ) {
     statuses.push(copyStatus('tooBusyPerson'));
   }
 
-  return statuses;
+  return statuses.length > 0 ? statuses : [copyStatus('normalMode')];
 }
 
 export function getUserStatuses(tasks, completedTasks, now = new Date()) {

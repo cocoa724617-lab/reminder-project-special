@@ -313,9 +313,15 @@
     }
 
     function formatPercent(value) {
+      if (value === null || value === undefined) return null;
       const percent = Number(value) * 100;
-      if (!Number.isFinite(percent)) return 0;
+      if (!Number.isFinite(percent)) return null;
       return Math.max(0, Math.min(100, Math.round(percent)));
+    }
+
+    function formatPercentText(value, emptyText = '集計対象なし') {
+      const percent = formatPercent(value);
+      return percent === null ? emptyText : `${percent}%`;
     }
 
     function formatBestWeekdays(bestWeekdays) {
@@ -385,8 +391,10 @@
       if (!userStatusCardEl) return;
 
       const stats = computeUserStatusStats(tasks, completedTasks);
-      const completionRate = formatPercent(stats.completionRate);
-      const postponeRate = formatPercent(stats.postponeRate);
+      const completionRate = stats.completionTargetCount > 0
+        ? formatPercentText(stats.completionRate)
+        : '集計対象なし';
+      const postponeRate = formatPercentText(stats.postponeRate, '0%');
 
       userStatusCardEl.innerHTML = `
         <div class="user-status-grid">
@@ -410,11 +418,11 @@
             <span class="user-status-text">${formatBestWeekdays(stats.bestWeekdays)}</span>
           </div>
           <div class="user-status-item">
-            <span class="user-status-value">${completionRate}%</span>
+            <span class="user-status-value">${completionRate}</span>
             <span class="user-status-label">達成率</span>
           </div>
           <div class="user-status-item">
-            <span class="user-status-value">${postponeRate}%</span>
+            <span class="user-status-value">${postponeRate}</span>
             <span class="user-status-label">後でやる使用率</span>
           </div>
         </div>
