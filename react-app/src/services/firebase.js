@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // 既存の firebase-init.js と同じ Firebase プロジェクトに接続する設定値。
 // 元ファイルは CDN の URL import だが、react-app は npm パッケージ (firebase) を
@@ -18,3 +19,4 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const db = getFirestore(app);

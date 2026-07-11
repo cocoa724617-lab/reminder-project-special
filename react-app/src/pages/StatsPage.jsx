@@ -1,31 +1,46 @@
-// 既存 stats.html の見た目を再現するための仮データ。
-// Firebase / stats.js には未接続で、実データは扱わない。
-const dummyStats = {
-  todayCount: 3,
-  weekCount: 12,
-  fromLaterCount: 4,
-  bestWeekdays: ["火", "木"],
-};
+import { useRecentCompletedTasks } from "../hooks/useTasks.js";
+import { computeCompletionStats } from "../utils/statsUtils.js";
 
 function StatsPage() {
+  const { completedTasks, isLoading, error } = useRecentCompletedTasks();
+
+  if (isLoading) {
+    return (
+      <section className="page-placeholder">
+        <p>読み込み中</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="page-placeholder">
+        <p className="error-message">
+          実績の取得に失敗しました。時間をおいて再度お試しください。
+        </p>
+      </section>
+    );
+  }
+
+  const stats = computeCompletionStats(completedTasks);
   const weekdayText =
-    dummyStats.bestWeekdays.length > 0
-      ? dummyStats.bestWeekdays.map((day) => `${day}曜日`).join("・")
+    stats.bestWeekdays.length > 0
+      ? stats.bestWeekdays.map((day) => `${day}曜日`).join("・")
       : "まだデータがありません";
 
   return (
     <section id="stats-screen">
       <div className="stat-tile-grid">
         <div className="stat-tile">
-          <span className="stat-tile-value">{dummyStats.todayCount}</span>
+          <span className="stat-tile-value">{stats.todayCount}</span>
           <span className="stat-tile-label">今日の完了</span>
         </div>
         <div className="stat-tile">
-          <span className="stat-tile-value">{dummyStats.weekCount}</span>
+          <span className="stat-tile-value">{stats.weekCount}</span>
           <span className="stat-tile-label">今週の完了</span>
         </div>
         <div className="stat-tile stat-tile-accent">
-          <span className="stat-tile-value">{dummyStats.fromLaterCount}</span>
+          <span className="stat-tile-value">{stats.fromLaterCount}</span>
           <span className="stat-tile-label">あとでから完了</span>
         </div>
       </div>

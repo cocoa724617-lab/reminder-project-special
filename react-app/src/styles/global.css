@@ -303,6 +303,11 @@ button:hover {
   font-size: 15px;
 }
 
+.error-message {
+  color: var(--danger);
+  font-weight: bold;
+}
+
 .stat-tile-grid {
   display: flex;
   gap: 12px;
