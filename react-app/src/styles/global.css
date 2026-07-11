@@ -1,0 +1,246 @@
+/* 既存アプリの style.css から、実績・記録画面(StatsPage)の再現に必要な部分だけを抜粋してコピーしたもの。
+   元の style.css 自体は変更しない。差分が出た場合はこのファイル側だけを直す。 */
+
+/* ===== カラートークン ===== */
+:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-alt: #f4f4f6;
+  --border: #e2e2e6;
+  --text: #1a1a1e;
+  --text-dim: #6b6b72;
+  --accent: #2f6fed;
+  --accent-dark: #1d54c4;
+  --accent-contrast: #ffffff;
+  --accent-tint: rgba(47, 111, 237, 0.08);
+  --success: #1f9d73;
+  --danger: #e5484d;
+  --later: #9a6b0a;
+  --header-height: 56px;
+}
+
+/* ===== 全体設定 ===== */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, "Hiragino Sans", "Yu Gothic", sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  padding: 24px;
+}
+
+h1 {
+  text-align: center;
+  font-size: 26px;
+  color: var(--text);
+  margin: 0 0 24px;
+  font-weight: bold;
+}
+
+h2 {
+  font-size: 20px;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+
+/* ===== 上部バー（ハンバーガー＋タイトル、画面上部に固定） ===== */
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--header-height);
+  padding: calc(env(safe-area-inset-top, 0px)) 16px 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-sizing: content-box;
+}
+
+.top-bar h1 {
+  margin: 0;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 固定ヘッダーを使うページは、本文がヘッダーに隠れないよう上部に余白を作る。
+   元のアプリは body にこのクラスを付けるが、React版はページのラップ要素に付けるため
+   body 限定ではなく汎用クラスとして定義する（body.has-fixed-header では一致しなかった）。 */
+.has-fixed-header {
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--header-height) + 20px);
+}
+
+.hamburger-button {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.hamburger-button span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
+}
+
+.hamburger-button:hover {
+  background: var(--surface-alt);
+}
+
+/* ===== カード共通 ===== */
+.card {
+  max-width: 520px;
+  margin: 0 auto;
+  background-color: var(--surface);
+  padding: 24px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(20, 20, 24, 0.05);
+}
+
+/* ===== 実績・記録画面 ===== */
+#stats-screen {
+  padding-bottom: 96px;
+}
+
+.stat-tile-grid {
+  display: flex;
+  gap: 12px;
+  max-width: 720px;
+  margin: 0 auto 24px;
+}
+
+.stat-weekday-card {
+  text-align: center;
+}
+
+.stat-footnote {
+  max-width: 720px;
+  margin: 0 auto;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.stat-tile {
+  flex: 1;
+  text-align: center;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-tile-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.stat-tile-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.stat-tile-accent {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+}
+
+.stat-tile-accent .stat-tile-value {
+  color: var(--accent-dark);
+}
+
+/* ===== 下ナビ ===== */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 22;
+
+  background-color: var(--surface);
+  border-top: 1px solid var(--border);
+
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+
+  padding-top: 10px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+}
+
+.bottom-nav a {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 4px 14px;
+  border-radius: 12px;
+
+  background: none;
+  color: var(--text-dim);
+  text-decoration: none;
+
+  font-size: 11.5px;
+  font-weight: 600;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.bottom-nav a:hover {
+  background: var(--surface-alt);
+  opacity: 1;
+}
+
+.bottom-nav a.is-active {
+  color: var(--accent);
+}
+
+.bottom-nav .icon {
+  font-size: 22px;
+}
+
+/* ===== スマホ対応 ===== */
+@media screen and (max-width: 600px) {
+  body {
+    padding: 16px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  .card {
+    padding: 20px;
+    border-radius: 20px;
+  }
+}
