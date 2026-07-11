@@ -189,6 +189,10 @@ h2 {
   color: var(--text-dim);
 }
 
+.nav-drawer-list a.is-logout {
+  color: var(--danger);
+}
+
 .soon-badge {
   margin-left: auto;
   font-size: 10.5px;
@@ -209,6 +213,79 @@ h2 {
   border-radius: 22px;
   border: 1px solid var(--border);
   box-shadow: 0 8px 24px rgba(20, 20, 24, 0.05);
+}
+
+/* ===== ボタン共通 ===== */
+button {
+  width: min(360px, 100%);
+  max-width: 360px;
+  display: block;
+  text-align: center;
+  padding: 14px;
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+  border: none;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  margin: 12px auto 0;
+}
+
+button:hover {
+  background-color: var(--accent-dark);
+}
+
+/* ===== ログイン画面 ===== */
+.home-page {
+  padding-bottom: 90px;
+}
+
+.home-main {
+  min-height: calc(100vh - 160px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.notification-card {
+  max-width: 420px;
+  width: 100%;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 32px 24px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(20, 20, 24, 0.06);
+}
+
+.notification-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.notification-card h2 {
+  margin: 0 0 12px;
+  font-size: 24px;
+}
+
+.notification-card p {
+  margin-bottom: 24px;
+}
+
+.login-error {
+  color: var(--danger);
+  font-weight: bold;
+}
+
+/* ===== 認証状態の読み込み中 ===== */
+.auth-loading {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-dim);
+  font-size: 15px;
 }
 
 /* ===== 共通ページ本文 ===== */
