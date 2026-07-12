@@ -3,6 +3,7 @@ import { useAuth } from "../contexts/useAuth.js";
 import {
   fetchRecentCompletedTasks,
   fetchTasks,
+  fetchTask,
   fetchCompletedTasks,
   completeTask as completeTaskInFirestore,
   deleteTask as deleteTaskInFirestore,
@@ -102,8 +103,9 @@ export function useTasks() {
   }, [currentUser]);
 
   async function completeTask(task) {
-    await completeTaskInFirestore(currentUser.uid, task);
+    const completedEntry = await completeTaskInFirestore(currentUser.uid, task);
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    return completedEntry;
   }
 
   async function removeTask(taskId) {
@@ -195,4 +197,50 @@ export function useLabelNames() {
   }, [currentUser]);
 
   return labelNames;
+}
+
+// タスク登録・編集フォーム用：taskId が指定されている間だけ既存タスクを1件取得する
+// （新規作成時は taskId が無いので何もしない＝isLoading は false のまま）。
+export function useTask(taskId) {
+  const { currentUser } = useAuth();
+  const [task, setTask] = useState(null);
+  const [isLoading, setIsLoading] = useState(!!taskId);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function load() {
+      if (!currentUser || !taskId) {
+        if (!isCancelled) {
+          setTask(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const result = await fetchTask(currentUser.uid, taskId);
+        if (!isCancelled) setTask(result);
+      } catch (err) {
+        if (!isCancelled) {
+          console.error("タスクの取得に失敗しました:", err);
+          setError(err);
+        }
+      } finally {
+        if (!isCancelled) setIsLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser, taskId]);
+
+  return { task, isLoading, error };
 }

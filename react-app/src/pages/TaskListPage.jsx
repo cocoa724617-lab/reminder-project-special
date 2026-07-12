@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTasks, useLabelNames } from "../hooks/useTasks.js";
 import { celebrateCompletion } from "../utils/celebrate.js";
 import TaskCard from "../components/TaskCard.jsx";
@@ -82,6 +82,10 @@ function TaskListPage() {
           ))}
         </div>
       )}
+
+      <Link to="/tasks/new" className="fab-button" aria-label="タスクを追加">
+        +
+      </Link>
     </section>
   );
 }

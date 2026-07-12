@@ -4,6 +4,7 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  addDoc,
   deleteDoc,
   updateDoc,
   query,
@@ -15,6 +16,56 @@ import { db } from "./firebase.js";
 
 function tasksCollection(uid) {
   return collection(db, "users", uid, "tasks");
+}
+
+// 既存 tasks-data.js の loadTask と同じ仕様：編集画面で1件だけ取得する。
+export async function fetchTask(uid, taskId) {
+  const snap = await getDoc(doc(db, "users", uid, "tasks", taskId));
+  return snap.exists() ? { ...snap.data(), id: snap.id } : null;
+}
+
+// 既存 tasks-data.js の saveTask と同じ仕様：新規は自動採番、編集は同じidに上書き保存する。
+export async function saveTask(uid, task) {
+  const id = task.id || doc(tasksCollection(uid)).id;
+  await setDoc(doc(db, "users", uid, "tasks", id), {
+    ...task,
+    id,
+    updatedAt: serverTimestamp(),
+  });
+  return id;
+}
+
+// 既存 tasks-data.js の clearFixedReminders と同じ仕様：
+// 「この日時に必ず通知する」設定はタスク保存のたびに作り直すため、まず既存分を消す。
+export async function clearFixedReminders(uid, taskId) {
+  const remindersQuery = query(
+    collection(db, "reminders"),
+    where("uid", "==", uid),
+    where("taskId", "==", taskId),
+    where("kind", "==", "fixed"),
+  );
+  const snapshot = await getDocs(remindersQuery);
+  await Promise.all(snapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)));
+}
+
+// 既存 tasks-data.js の saveFixedReminders と同じ仕様。
+export async function saveFixedReminders(uid, taskId, title, fcmToken, reminders) {
+  await clearFixedReminders(uid, taskId);
+  await Promise.all(
+    reminders.map((reminder) =>
+      addDoc(collection(db, "reminders"), {
+        uid,
+        taskId,
+        title,
+        body: "指定した日時のお知らせです",
+        remindAt: Timestamp.fromDate(new Date(`${reminder.date}T${reminder.time}:00+09:00`)),
+        fcmToken,
+        kind: "fixed",
+        notified: false,
+        createdAt: serverTimestamp(),
+      }),
+    ),
+  );
 }
 
 // 既存 tasks-data.js の loadTasks と同じ仕様：ユーザーの未完了タスク一覧（tasksサブコレクション全件）を取得する。
