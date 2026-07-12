@@ -36,7 +36,20 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == resource.data.uid;
 
       // 固定リマインダー(saveFixedReminders)の新規作成のみ許可。作成者は自分のuidを持つドキュメントしか作れない。
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+      // さらに fcmToken は「未指定(null)」か「本人の users/{uid}.fcmToken と一致する値」しか書き込めないようにする。
+      // これが無いと、他人のfcmTokenを知っている（何らかの経路で漏れた）攻撃者が、
+      // 自分のuidで reminders ドキュメントを作成しつつ fcmToken だけ他人のものを指定することで、
+      // sendReminderNotifications（uidを見ずにfcmToken宛てへ送信する）経由で他人へ任意内容のプッシュ通知を
+      // 送りつけられてしまう（taskId は攻撃者自身のtasksを参照するだけなので、この経路の悪用は防げない）。
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.uid
+        && (
+          !("fcmToken" in request.resource.data) || request.resource.data.fcmToken == null ||
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && request.resource.data.fcmToken == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.fcmToken
+          )
+        );
 
       // 未通知リマインダーの取り消し(cancelPendingReminders / clearFixedReminders)用。
       allow delete: if request.auth != null && request.auth.uid == resource.data.uid;
