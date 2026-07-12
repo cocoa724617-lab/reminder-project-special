@@ -10,6 +10,7 @@ import {
   query,
   where,
   serverTimestamp,
+  increment,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase.js";
@@ -154,6 +155,25 @@ export async function completeTask(uid, task) {
   await cancelPendingReminders(uid, task.id);
 
   return { ...task, id: completedId, originalTaskId: task.id, deletedAt: completedAt };
+}
+
+// 既存 tasks-data.js の setTaskStatus と同じ仕様：statusフィールドだけを更新する
+// （あとでやる画面の「今やる」＝後でやる状態の解除に使う）。
+export async function setTaskStatus(uid, taskId, status) {
+  await updateDoc(doc(db, "users", uid, "tasks", taskId), { status });
+}
+
+// 既存 tasks-data.js の delayTaskWithLaterTime と同じ仕様：
+// 「あとでやる」時に選んだ時間帯を保存する。dueDateやupdatedAtは元実装でも更新していないため、ここでも触らない。
+// laterTimeは実際のリマインダー再スケジュールには使われず（Cloud Functions側は見ていない）、
+// 表示・統計用のメタデータとして保存されるだけ。
+export async function delayTaskWithLaterTime(uid, taskId, laterTime) {
+  await updateDoc(doc(db, "users", uid, "tasks", taskId), {
+    status: "後でやる",
+    laterTime,
+    laterCount: increment(1),
+    lastPostponedAt: serverTimestamp(),
+  });
 }
 
 // 既存 tasks-data.js の deleteTask と同じ仕様：タスク本体を削除し、保留中のリマインダーもキャンセルする。

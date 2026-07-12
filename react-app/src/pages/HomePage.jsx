@@ -194,14 +194,9 @@ function HomePage() {
               <button type="button" onClick={() => handleComplete(nextTask)}>
                 完了
               </button>
-              <button
-                type="button"
-                className="btn-secondary home-later-button"
-                disabled
-                title="あとでやる機能は移行準備中です"
-              >
-                あとでやる（準備中）
-              </button>
+              <Link to={`/postpone/${nextTask.id}`} className="button-link btn-secondary home-later-button">
+                あとでやる
+              </Link>
             </div>
           </div>
         </section>
@@ -227,9 +222,9 @@ function HomePage() {
                   <p className="task-remind">{getReminderLabel(task)}</p>
                   <MetaPillRow task={task} labelNames={labelNames} />
                 </div>
-                <span className="home-later-link" aria-disabled="true" title="あとでやる機能は移行準備中です">
+                <Link to={`/postpone/${task.id}`} className="home-later-link">
                   あとで
-                </span>
+                </Link>
               </div>
             ))
           )}

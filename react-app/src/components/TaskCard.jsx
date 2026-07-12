@@ -29,11 +29,14 @@ function getTaskTitle(task, fallback) {
   return task.title || task.name || fallback;
 }
 
-// TaskListPage / CompletedTasksPage で共用するタスクカード。
+// TaskListPage / CompletedTasksPage / PostponedTasksPage で共用するタスクカード。
 // variant="active"    : 既存 task-list.html のカード（完了・後でやる・編集・削除ボタン付き）
 // variant="completed" : 既存 completed-tasks.html のカード（完了日・削除ボタンのみ）
+// variant="postponed" : 既存 atodeyaru.html 一覧モードのカードを拡張したもの
+//                        （元の期限・あとでやるにした時間・後回し回数・最後に後回しにした日を追加表示。
+//                        アクションはactiveと同じ完了/後でやる/編集/削除の4つ）
 // compact             : 既存 .task-card-compact 相当（completed-tasks.html は常に compact）
-function TaskCard({ task, variant = "active", compact = false, labelNames, onComplete, onDelete, onEdit }) {
+function TaskCard({ task, variant = "active", compact = false, labelNames, onComplete, onDelete, onEdit, onPostpone }) {
   if (!task) return null;
 
   const labelMeta = getTaskLabel(task.color, labelNames);
@@ -71,6 +74,7 @@ function TaskCard({ task, variant = "active", compact = false, labelNames, onCom
 
   const later = String(task.status || "").trim() === "後でやる";
   const memo = task.memo || task.description || "";
+  const isPostponed = variant === "postponed";
 
   return (
     <div className={cardClassName} style={cardStyle}>
@@ -79,19 +83,33 @@ function TaskCard({ task, variant = "active", compact = false, labelNames, onCom
           <span className="color-dot task-title-dot" style={{ background: labelMeta.color }}></span>
           {getTaskTitle(task, "(無題)")}
         </h3>
-        <p className="task-remind">{getReminderLabel(task)}</p>
-        <MetaPillRow task={task} labelNames={labelNames} />
-        <p className="task-memo">メモ：{memo || "なし"}</p>
-        <span className={`status-pill ${later ? "status-later" : "status-pending"}`}>
-          {later ? "後でやる" : "未完了"}
-        </span>
+
+        {isPostponed ? (
+          <>
+            <p className="task-remind">元の期限：{task.dueDate || task.date || "未設定"}</p>
+            <MetaPillRow task={task} labelNames={labelNames} />
+            <p className="task-memo">メモ：{memo || "なし"}</p>
+            <p className="task-memo">あとでやるにした時間：{task.laterTime || "未設定"}</p>
+            <p className="task-memo">後回しにした回数：{task.laterCount || 0}回</p>
+            <p className="task-memo">最後に後回しにした日：{formatDate(task.lastPostponedAt, "記録なし")}</p>
+          </>
+        ) : (
+          <>
+            <p className="task-remind">{getReminderLabel(task)}</p>
+            <MetaPillRow task={task} labelNames={labelNames} />
+            <p className="task-memo">メモ：{memo || "なし"}</p>
+            <span className={`status-pill ${later ? "status-later" : "status-pending"}`}>
+              {later ? "後でやる" : "未完了"}
+            </span>
+          </>
+        )}
       </div>
       <div className="task-actions">
         <button type="button" onClick={() => onComplete(task)}>
           完了
         </button>
-        <button type="button" disabled title="あとでやる機能は移行準備中です">
-          後でやる（準備中）
+        <button type="button" onClick={() => onPostpone(task)}>
+          後でやる
         </button>
         <button type="button" onClick={() => onEdit(task)}>
           編集

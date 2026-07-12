@@ -1,21 +1,13 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useTasks, useLabelNames } from "../hooks/useTasks.js";
 import { celebrateCompletion } from "../utils/celebrate.js";
 import TaskCard from "../components/TaskCard.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 
-// 既存 task-list.html と同じ並び順：完了/後でやる状態のタスクを後ろへ回す（安定ソート）。
-function sortTasks(tasks) {
-  return [...tasks].sort((a, b) => {
-    const statusA = String(a.status || "").trim();
-    const statusB = String(b.status || "").trim();
-    const doneA = statusA === "完了" || statusA === "後でやる" ? 1 : 0;
-    const doneB = statusB === "完了" || statusB === "後でやる" ? 1 : 0;
-    return doneA - doneB;
-  });
-}
-
-function TaskListPage() {
+// 既存 atodeyaru.html のidなしモード（一覧モード）のReact版。
+// useTasks() はログイン中ユーザー自身の tasks サブコレクションしか取得しないため、
+// 他ユーザーのタスクが混ざることはない。並び順も既存同様、取得順のまま特別なソートは行わない。
+function PostponedTasksPage() {
   const { tasks, isLoading, error, completeTask, removeTask } = useTasks();
   const labelNames = useLabelNames();
   const navigate = useNavigate();
@@ -65,19 +57,20 @@ function TaskListPage() {
     navigate(`/postpone/${task.id}`);
   }
 
-  const sortedTasks = sortTasks(tasks);
+  // 不正な日付や欠損データがあってもcrashしないよう、statusの取り出し自体もString化してから比較する。
+  const postponedTasks = tasks.filter((task) => String((task && task.status) || "").trim() === "後でやる");
 
   return (
-    <section id="task-list-screen">
-      {sortedTasks.length === 0 ? (
-        <EmptyState>まだタスクがありません。＋ボタンから追加できます。</EmptyState>
+    <section id="postponed-tasks-screen">
+      {postponedTasks.length === 0 ? (
+        <EmptyState>今「あとでやる」に入っているタスクはありません。</EmptyState>
       ) : (
-        <div id="task-list">
-          {sortedTasks.map((task) => (
+        <div id="postponed-task-list">
+          {postponedTasks.map((task) => (
             <TaskCard
               key={task.id}
               task={task}
-              variant="active"
+              variant="postponed"
               labelNames={labelNames}
               onComplete={handleComplete}
               onDelete={handleDelete}
@@ -87,12 +80,8 @@ function TaskListPage() {
           ))}
         </div>
       )}
-
-      <Link to="/tasks/new" className="fab-button" aria-label="タスクを追加">
-        +
-      </Link>
     </section>
   );
 }
 
-export default TaskListPage;
+export default PostponedTasksPage;

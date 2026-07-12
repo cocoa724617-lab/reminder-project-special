@@ -38,6 +38,11 @@ function NavDrawer({ isOpen, onClose }) {
             </Link>
           </li>
           <li>
+            <Link to="/settings/notifications" onClick={onClose}>
+              通知設定
+            </Link>
+          </li>
+          <li>
             <a href="#" className="is-logout" onClick={handleLogout}>
               ログアウト
             </a>

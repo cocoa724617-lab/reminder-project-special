@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/useAuth.js";
 import { useTask, useLabelNames } from "../hooks/useTasks.js";
+import { useFcmToken } from "../hooks/useFcmToken.js";
 import { saveTask, deleteTask, saveFixedReminders, clearFixedReminders } from "../services/taskService.js";
 import { TASK_LABELS, getTaskLabel, normalizeImportance, normalizeUrgency } from "../utils/taskLabels.js";
 
@@ -69,6 +70,9 @@ function TaskFormPage() {
   const { currentUser } = useAuth();
   const { task: existingTask, isLoading, error } = useTask(editId);
   const labelNames = useLabelNames();
+  // 既にブラウザ通知が許可済みなら、ここではユーザーに新たな許可を求めずトークンだけ受け取って使う
+  // （まだ未許可の場合は token が null のまま。通知設定画面で許可すれば以降このページでも使えるようになる）。
+  const { token: fcmToken } = useFcmToken();
 
   const [form, setForm] = useState(emptyFormState);
   const [isSaving, setIsSaving] = useState(false);
@@ -156,7 +160,7 @@ function TaskFormPage() {
       const savedId = await saveTask(currentUser.uid, taskObj);
 
       if (form.notifyEnabled && completeFixedReminders.length > 0) {
-        await saveFixedReminders(currentUser.uid, savedId, form.name, null, completeFixedReminders);
+        await saveFixedReminders(currentUser.uid, savedId, form.name, fcmToken, completeFixedReminders);
       } else {
         await clearFixedReminders(currentUser.uid, savedId);
       }

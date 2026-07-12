@@ -49,3 +49,16 @@ export const REPEAT_LABELS = {
 export function isRepeatingTask(task) {
   return !!(task && task.repeat && task.repeat !== "none");
 }
+
+// 既存 notification-settings.html の CUSTOMIZABLE_LABEL_KEYS と同じ：noneはカスタマイズ対象外。
+export const CUSTOMIZABLE_LABEL_KEYS = Object.keys(TASK_LABELS).filter((key) => key !== "none");
+
+// 既存 collectLabelNames と同じ仕様：空欄はデフォルト名にフォールバックする。保存直前に呼ぶ想定。
+export function normalizeLabelNames(labelNamesForm) {
+  const normalized = {};
+  CUSTOMIZABLE_LABEL_KEYS.forEach((key) => {
+    const raw = (labelNamesForm[key] || "").trim();
+    normalized[key] = raw || TASK_LABELS[key].name;
+  });
+  return normalized;
+}

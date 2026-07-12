@@ -278,6 +278,62 @@ button:hover {
   font-weight: bold;
 }
 
+.login-info {
+  color: var(--success);
+  font-weight: bold;
+}
+
+.login-divider-text {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  margin: 20px 0 0;
+}
+
+.email-auth-form {
+  max-width: none;
+  margin: 16px 0 0;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.email-auth-form button {
+  margin: 0;
+}
+
+.login-links-row {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.link-button {
+  width: auto;
+  max-width: none;
+  display: inline;
+  background: none;
+  color: var(--accent-dark);
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  margin: 0;
+  box-shadow: none;
+}
+
+.link-button:hover {
+  background: none;
+  color: var(--accent);
+}
+
 /* ===== 認証状態の読み込み中 ===== */
 .auth-loading {
   min-height: 100vh;
@@ -1222,6 +1278,303 @@ input.due-date-button {
   border-radius: 14px;
 }
 
+/* ===== フォーム共通（通知設定画面などプレーンな <form> をカードとして見せる） ===== */
+form,
+.menu {
+  max-width: 520px;
+  margin: 0 auto;
+  background-color: var(--surface);
+  padding: 24px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(20, 20, 24, 0.05);
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+label {
+  display: block;
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+input[type="text"],
+input[type="time"],
+input[type="date"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  width: 100%;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 15px;
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-dim);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.15);
+}
+
+/* ===== ボタンのバリエーション ===== */
+.btn-secondary {
+  background-color: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background-color: #e9e9ec;
+}
+
+a.button-link {
+  width: min(360px, 100%);
+  max-width: 360px;
+  display: block;
+  text-align: center;
+  padding: 14px;
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: bold;
+  text-decoration: none;
+  cursor: pointer;
+  margin: 12px auto 0;
+}
+
+a.button-link:hover {
+  background-color: var(--accent-dark);
+}
+
+.actions {
+  margin-top: 24px;
+}
+
+/* ===== ユーザー情報カード（通知設定画面） ===== */
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.user-info img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.user-info .user-name {
+  font-weight: bold;
+  color: var(--text);
+}
+
+.user-info .user-email {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.notification-status-blocked {
+  color: var(--danger);
+  font-weight: bold;
+}
+
+/* ===== iOSインストール案内 ===== */
+.ios-banner-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 720px;
+  margin: 0 0 18px;
+  background: var(--accent-tint);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.ios-banner-card .ios-banner-icon {
+  font-size: 18px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.ios-banner-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+/* ===== 色ラベルの名前設定 ===== */
+.label-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.label-name-row .color-dot {
+  width: 20px;
+  height: 20px;
+}
+
+.label-name-row input[type="text"] {
+  flex: 1;
+}
+
+/* ===== 通知除外時間帯の行 ===== */
+.exclude-time-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.exclude-time-item input[type="time"] {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.exclude-time-item .exclude-time-remove {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+
+/* ===== あとでやる画面 ===== */
+.atodeyaru-main {
+  min-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.atodeyaru-content {
+  width: min(720px, 100%);
+  text-align: center;
+  padding: 24px 0;
+}
+
+.atodeyaru-task-title {
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.atodeyaru-message {
+  margin: 0;
+  font-size: clamp(24px, 5vw, 40px);
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.atodeyaru-question {
+  margin: 36px 0 18px;
+  color: var(--text-dim);
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: bold;
+}
+
+.later-time-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin: 0 auto;
+  max-width: 560px;
+}
+
+.later-time-button {
+  width: auto;
+  min-width: 128px;
+  max-width: 180px;
+  min-height: 52px;
+  margin: 0;
+  padding: 13px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+.later-time-button:hover {
+  background-color: var(--surface-alt);
+}
+
+.later-time-button.is-selected {
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(47, 111, 237, 0.18);
+}
+
+/* ===== 後回し回数の確認モーダル（postpone-limit-modal相当） ===== */
+.mini-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.mini-modal-overlay.is-visible {
+  display: flex;
+}
+
+.mini-modal-card {
+  width: min(400px, 100%);
+  max-height: 80vh;
+  overflow-y: auto;
+  background-color: var(--surface);
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.mini-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.mini-modal-header h2 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text);
+}
+
 /* ===== スマホ対応 ===== */
 @media screen and (max-width: 600px) {
   body {
@@ -1287,5 +1640,23 @@ input.due-date-button {
   .current-status-card:first-child .current-status-description {
     font-size: 14px;
     line-height: 1.7;
+  }
+
+  .atodeyaru-main {
+    min-height: calc(100vh - 112px);
+  }
+
+  .atodeyaru-message {
+    font-size: 26px;
+  }
+
+  .atodeyaru-question {
+    margin-top: 30px;
+    font-size: 24px;
+  }
+
+  .later-time-button {
+    flex: 1 1 132px;
+    max-width: 180px;
   }
 }

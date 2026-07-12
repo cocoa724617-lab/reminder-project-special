@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// リポジトリ内に firestore.rules が存在しなかったため、実際のクライアントコード
+// （tasks-data.js / user-data.js / react-app/src/services/*.js）が読み書きしている
+// コレクション構造から起こした新規案です。デプロイはしていません（本番ルールは未確認）。
+//
+// 対象コレクション：
+//   - users/{uid}                         … fcmToken / notificationSettings / labelNames
+//   - users/{uid}/tasks/{taskId}          … 未完了タスク
+//   - users/{uid}/completedTasks/{id}     … 完了済みタスク履歴
+//   - reminders/{reminderId}              … uidフィールドで所有者を持つフラットなコレクション
+//                                            （ランダム通知の連鎖予約はCloud Functionsが作成、
+//                                              固定リマインダーはクライアントが作成）
+//
+// Cloud Functions（functions/index.js）はすべて Admin SDK 経由のため、
+// このルールの影響を受けません（Admin SDKはセキュリティルールをバイパスします）。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // users/{uid} 本体。fcmToken・notificationSettings・labelNames を保持する。
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // users/{uid} 配下の全サブコレクション（tasks, completedTasks、将来追加分も含む）。
+    // 本人以外は一切アクセスできない。
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // reminders はユーザーの配下ではなくフラットなコレクションのため、
+    // ドキュメント自身の uid フィールドで所有者を判定する。
+    match /reminders/{reminderId} {
+      // 一覧取得(list)はクライアントが必ず where("uid","==",自分のuid) を付けてクエリするため、
+      // このルールと矛盾しない範囲でのみ許可される（Firestoreはルールを満たせないクエリを拒否する）。
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+
+      // 固定リマインダー(saveFixedReminders)の新規作成のみ許可。作成者は自分のuidを持つドキュメントしか作れない。
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+
+      // 未通知リマインダーの取り消し(cancelPendingReminders / clearFixedReminders)用。
+      allow delete: if request.auth != null && request.auth.uid == resource.data.uid;
+
+      // クライアントはリマインダーを直接更新しない（作り直す場合は削除→新規作成）ため、更新は許可しない。
+      // ランダム通知の連鎖予約(onTaskWritten/sendReminderNotifications)はAdmin SDKが更新するため、
+      // ここを true にする必要はない。
+      allow update: if false;
+    }
+
+    // 上記のどれにも一致しないパスは明示的に拒否（Firestoreのデフォルトも拒否だが、意図を明確にするため）。
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
