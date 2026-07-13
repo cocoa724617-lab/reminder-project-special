@@ -1,5 +1,7 @@
 // 既存 user-status.js の verbatim 移植。
 // 画像パスは react-app/public/assets/status/ にコピー済みの静的アセットを指す。
+import { startOfWeek } from "./dateUtils.js";
+
 const RECENT_DAYS = 7;
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -321,6 +323,42 @@ export function computeUserStatusStats(tasks, completedTasks, now = new Date()) 
     postponedCompletedCount: recentCompletedTasks.filter((task) => getLaterCount(task) > 0).length,
     bestWeekdays: getBestWeekdays(recentCompletedTasks),
     routineCompletedTaskNames: getRoutineCompletedTaskNames(recentCompletedTasks),
+  };
+}
+
+// 「今週の進み具合」カード表示専用の集計。ステータス判定（computeUserStatusStats）とは別に、
+// 月曜0時起点の暦週でリセットする。バッジ判定側は移動窓のまま据え置き、月曜朝に実績が
+// 急に空になってステータスが乱高下するのを避ける。
+export function computeWeeklyProgress(tasks, completedTasks, now = new Date()) {
+  const activeTasks = asArray(tasks);
+  const completedTaskList = asArray(completedTasks);
+  const currentDate = toDate(now) || new Date();
+
+  const weekStart = startOfWeek(currentDate);
+  const weekEnd = addDays(weekStart, 7);
+
+  const weeklyCompletedTasks = completedTaskList.filter((task) => inRange(getCompletedDate(task), weekStart, weekEnd));
+  const todayCompletedCount = weeklyCompletedTasks.filter((task) => isSameDay(getCompletedDate(task), currentDate)).length;
+  const weeklyCompletedCount = weeklyCompletedTasks.length;
+  const postponedCompletedCount = weeklyCompletedTasks.filter((task) => getLaterCount(task) > 0).length;
+  const bestWeekdays = getBestWeekdays(weeklyCompletedTasks);
+
+  const weeklyTaskPool = activeTasks
+    .filter((task) => inRange(getRegisteredDate(task), weekStart, weekEnd))
+    .concat(weeklyCompletedTasks);
+  const postponedWeeklyTasksCount = weeklyTaskPool.filter((task) => getLaterCount(task) > 0).length;
+
+  const completionTargetCount = countCompletionTargetTasks(activeTasks, completedTaskList, weekStart, weekEnd);
+  const completionRate = completionTargetCount > 0 ? round(weeklyCompletedCount / completionTargetCount, 4) : null;
+
+  return {
+    todayCompletedCount,
+    weeklyCompletedCount,
+    postponedCompletedCount,
+    bestWeekdays,
+    completionTargetCount,
+    completionRate,
+    postponeRate: round(safeDivide(postponedWeeklyTasksCount, weeklyTaskPool.length), 4),
   };
 }
 

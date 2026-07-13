@@ -26,11 +26,14 @@ export async function fetchTask(uid, taskId) {
 }
 
 // 既存 tasks-data.js の saveTask と同じ仕様：新規は自動採番、編集は同じidに上書き保存する。
+// 新規作成時のみ createdAt を付与する（userStatusUtils の登録日集計に必要。編集時は既存の createdAt を保持）。
 export async function saveTask(uid, task) {
+  const isNewTask = !task.id;
   const id = task.id || doc(tasksCollection(uid)).id;
   await setDoc(doc(db, "users", uid, "tasks", id), {
     ...task,
     id,
+    ...(isNewTask ? { createdAt: serverTimestamp() } : {}),
     updatedAt: serverTimestamp(),
   });
   return id;

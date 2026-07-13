@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTasks, useRecentCompletedTasks, useLabelNames } from "../hooks/useTasks.js";
 import { computeCompletionStats } from "../utils/statsUtils.js";
-import { computeUserStatusStats, getUserStatusesFromStats } from "../utils/userStatusUtils.js";
+import { computeUserStatusStats, getUserStatusesFromStats, computeWeeklyProgress } from "../utils/userStatusUtils.js";
 import { normalizeImportance } from "../utils/taskLabels.js";
 import { celebrateCompletion } from "../utils/celebrate.js";
 import MetaPillRow from "../components/MetaPillRow.jsx";
@@ -146,11 +146,14 @@ function HomePage() {
   const todaysActive = activeTasks.filter(isTodayTask).filter((task) => !nextTask || task.id !== nextTask.id);
 
   const completionStats = computeCompletionStats(recentCompleted);
+  // バッジ判定用：直近7日の移動窓（月曜になっても急にリセットされない）。
   const userStatusStats = computeUserStatusStats(tasks, recentCompleted);
   const currentStatuses = getUserStatusesFromStats(userStatusStats);
+  // 「今週の進み具合」カード表示用：月曜0時起点の暦週で、実際に毎週リセットされる。
+  const weeklyProgress = computeWeeklyProgress(tasks, recentCompleted);
   const completionRateText =
-    userStatusStats.completionTargetCount > 0 ? formatPercentText(userStatusStats.completionRate) : "集計対象なし";
-  const postponeRateText = formatPercentText(userStatusStats.postponeRate, "0%");
+    weeklyProgress.completionTargetCount > 0 ? formatPercentText(weeklyProgress.completionRate) : "集計対象なし";
+  const postponeRateText = formatPercentText(weeklyProgress.postponeRate, "0%");
 
   return (
     <section id="home-screen" className="home-screen">
@@ -236,23 +239,23 @@ function HomePage() {
         <div className="user-status-card" aria-live="polite">
           <div className="user-status-grid">
             <div className="user-status-item">
-              <span className="user-status-value">{userStatusStats.todayCompletedCount}</span>
+              <span className="user-status-value">{weeklyProgress.todayCompletedCount}</span>
               <span className="user-status-label">今日の完了</span>
               <span className="user-status-unit">個</span>
             </div>
             <div className="user-status-item">
-              <span className="user-status-value">{userStatusStats.weeklyCompletedCount}</span>
+              <span className="user-status-value">{weeklyProgress.weeklyCompletedCount}</span>
               <span className="user-status-label">今週の完了</span>
               <span className="user-status-unit">個</span>
             </div>
             <div className="user-status-item">
-              <span className="user-status-value">{userStatusStats.postponedCompletedCount}</span>
+              <span className="user-status-value">{weeklyProgress.postponedCompletedCount}</span>
               <span className="user-status-label">あとでから完了</span>
               <span className="user-status-unit">個</span>
             </div>
             <div className="user-status-item user-status-item-wide">
               <span className="user-status-label">よくできた曜日</span>
-              <span className="user-status-text">{formatBestWeekdays(userStatusStats.bestWeekdays)}</span>
+              <span className="user-status-text">{formatBestWeekdays(weeklyProgress.bestWeekdays)}</span>
             </div>
             <div className="user-status-item">
               <span className="user-status-value">{completionRateText}</span>
@@ -263,7 +266,7 @@ function HomePage() {
               <span className="user-status-label">後でやる使用率</span>
             </div>
           </div>
-          <p className="user-status-message">{getUserStatusMessage(userStatusStats)}</p>
+          <p className="user-status-message">{getUserStatusMessage(weeklyProgress)}</p>
         </div>
       </section>
 
