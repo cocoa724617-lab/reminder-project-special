@@ -1,6 +1,8 @@
 // 既存 task-labels.js の色ラベル定義・正規化ロジックの移植。
 // 元ファイルはモジュールスコープの customLabelNames を setCustomLabelNames() で書き換える設計だが、
 // Reactの再レンダリングとは相性が悪いため、customLabelNames は引数として明示的に渡す形にしている。
+import { toDate } from "./dateUtils.js";
+
 export const TASK_LABELS = {
   none: { name: "ラベルなし", color: "#c7c7cc" },
   urgent: { name: "緊急", color: "#ff3b30" },
@@ -48,6 +50,27 @@ export const REPEAT_LABELS = {
 
 export function isRepeatingTask(task) {
   return !!(task && task.repeat && task.repeat !== "none");
+}
+
+// 以下は移植元には存在しない新規ロジック（旧アプリにはこの機能自体がなかった）。
+// 繰り返しタスクは完了すると dueDate が次回分に進み status も「未完了」に戻るため、
+// 「今回分をもう完了したか」を見た目上は区別できない。
+// taskService.completeTask が書き込む lastCompletedAt と、現在の dueDate（＝次回の復活日時）
+// だけで判定する：lastCompletedAt が入っていて、かつ dueDate（次回）がまだ来ていなければ
+// 「今回分は完了済み・次回まで待機中」とみなす。dueDateが来た時点で自動的にnullへ戻る
+// （lastCompletedAtは前回分の記録として残るだけで、以降の判定には影響しない）。
+// 日数固定のスパン計算が不要なため、daily/weekly/monthly/yearlyすべてで共通して使える。
+export function getRepeatCycleStatus(task, now = new Date()) {
+  if (!isRepeatingTask(task)) return null;
+  if (!task.lastCompletedAt) return null;
+
+  const nextDueDate = toDate(task.dueDate);
+  if (!nextDueDate) return null;
+
+  const currentDate = toDate(now) || new Date();
+  if (currentDate >= nextDueDate) return null;
+
+  return { completedAt: toDate(task.lastCompletedAt), nextDueDate };
 }
 
 // 既存 notification-settings.html の CUSTOMIZABLE_LABEL_KEYS と同じ：noneはカスタマイズ対象外。

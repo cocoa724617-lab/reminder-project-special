@@ -1,5 +1,5 @@
 import { getTaskLabel } from "../utils/taskLabels.js";
-import { formatDate } from "../utils/dateUtils.js";
+import { formatDate, formatDateTimeJa } from "../utils/dateUtils.js";
 import MetaPillRow from "./MetaPillRow.jsx";
 
 // 既存 task-list.html / index.html の getReminderLabel と同じ実装。
@@ -36,7 +36,17 @@ function getTaskTitle(task, fallback) {
 //                        （元の期限・あとでやるにした時間・後回し回数・最後に後回しにした日を追加表示。
 //                        アクションはactiveと同じ完了/後でやる/編集/削除の4つ）
 // compact             : 既存 .task-card-compact 相当（completed-tasks.html は常に compact）
-function TaskCard({ task, variant = "active", compact = false, labelNames, onComplete, onDelete, onEdit, onPostpone }) {
+function TaskCard({
+  task,
+  variant = "active",
+  compact = false,
+  labelNames,
+  cycleStatus = null,
+  onComplete,
+  onDelete,
+  onEdit,
+  onPostpone,
+}) {
   if (!task) return null;
 
   const labelMeta = getTaskLabel(task.color, labelNames);
@@ -98,14 +108,25 @@ function TaskCard({ task, variant = "active", compact = false, labelNames, onCom
             <p className="task-remind">{getReminderLabel(task)}</p>
             <MetaPillRow task={task} labelNames={labelNames} />
             <p className="task-memo">メモ：{memo || "なし"}</p>
-            <span className={`status-pill ${later ? "status-later" : "status-pending"}`}>
-              {later ? "後でやる" : "未完了"}
-            </span>
+            {cycleStatus ? (
+              <span className="status-pill status-cycle-done">
+                今回分は完了済み・次回：{formatDateTimeJa(cycleStatus.nextDueDate)}
+              </span>
+            ) : (
+              <span className={`status-pill ${later ? "status-later" : "status-pending"}`}>
+                {later ? "後でやる" : "未完了"}
+              </span>
+            )}
           </>
         )}
       </div>
       <div className="task-actions">
-        <button type="button" onClick={() => onComplete(task)}>
+        <button
+          type="button"
+          onClick={() => onComplete(task)}
+          disabled={!!cycleStatus}
+          title={cycleStatus ? `次回（${formatDateTimeJa(cycleStatus.nextDueDate)}）まで完了済みです` : undefined}
+        >
           完了
         </button>
         <button type="button" onClick={() => onPostpone(task)}>

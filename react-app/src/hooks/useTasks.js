@@ -59,8 +59,9 @@ export function useRecentCompletedTasks(days = 14) {
 }
 
 // ログイン中ユーザーの未完了タスク一覧を取得するフック。
-// completeTask / removeTask は Firestore を更新したあと、ローカルの一覧からも該当タスクを
-// 取り除く（既存 task-list.html の tasks.splice(...); render(); と同じ、再取得しない楽観更新）。
+// removeTask、および completeTask の通常タスクは、Firestore を更新したあとローカルの一覧からも
+// 該当タスクを取り除く（既存 task-list.html の tasks.splice(...); render(); と同じ、再取得しない楽観更新）。
+// completeTask の繰り返しタスクは Firestore 上で消えないため、一覧からは取り除かず更新後の内容に差し替える。
 export function useTasks() {
   const { currentUser } = useAuth();
   const [tasks, setTasks] = useState([]);
@@ -102,9 +103,13 @@ export function useTasks() {
     };
   }, [currentUser]);
 
+  // 繰り返しタスクは Firestore 上では削除されず更新されるだけなので、ローカル一覧からも
+  // 削除するのではなく updatedTask の内容で差し替える（通常タスクは従来通り一覧から取り除く）。
   async function completeTask(task) {
-    const completedEntry = await completeTaskInFirestore(currentUser.uid, task);
-    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    const { completedEntry, updatedTask } = await completeTaskInFirestore(currentUser.uid, task);
+    setTasks((prev) =>
+      updatedTask ? prev.map((t) => (t.id === task.id ? updatedTask : t)) : prev.filter((t) => t.id !== task.id),
+    );
     return completedEntry;
   }
 

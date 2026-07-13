@@ -14,6 +14,16 @@ export function formatDate(value, emptyLabel = "完了日不明") {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+// 移植元にはない新規関数：「次回：YYYY年MM月DD日 HH:mm」表示用。
+// 繰り返しタスクの dueDate は日付のみ（時刻情報を持たない）ため、時刻部分は 00:00 になる。
+export function formatDateTimeJa(value, emptyLabel = "未定") {
+  const date = toDate(value);
+  if (!date) return emptyLabel;
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${hh}:${mm}`;
+}
+
 export function isSameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }

@@ -130,9 +130,15 @@ function computeNextDueDate(dueDateStr, repeat) {
   return `${y}-${m}-${d}`;
 }
 
-// 既存 tasks-data.js の completeTask と同じ仕様：
+// 既存 tasks-data.js の completeTask がベース：
 // completedTasks へ履歴を書き込み、繰り返しタスクなら次回期限へリセット、そうでなければ tasks から削除し、
 // 保留中のリマインダーも合わせてキャンセルする。
+// 移植元にはなかった拡張：繰り返しタスクには lastCompletedAt も書き込む。
+// 「今回分は完了済み・次のdueDateが来るまでは未完了扱いにしない」判定（taskLabels.js の getRepeatCycleStatus）
+// が、この lastCompletedAt と dueDate だけで完結できるようにするため。
+// 戻り値も { completedEntry, updatedTask } に変更し、呼び出し側（useTasks.js）がローカルの
+// tasks 一覧を「削除」ではなく「更新後の内容で差し替え」できるようにしている
+// （繰り返しタスクは Firestore 上では消えていないため、ローカル一覧からも消してはいけない）。
 export async function completeTask(uid, task) {
   const completedId = `${task.id}_${Date.now()}`;
   const completedAt = new Date();
@@ -142,22 +148,27 @@ export async function completeTask(uid, task) {
     deletedAt: serverTimestamp(),
   });
 
+  let updatedTask = null;
   if (isRepeatingTask(task)) {
-    await updateDoc(doc(db, "users", uid, "tasks", task.id), {
+    const patch = {
       status: "未完了",
       dueDate: computeNextDueDate(task.dueDate, task.repeat),
       laterCount: 0,
       lastPostponedAt: null,
       laterTime: null,
+      lastCompletedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    };
+    await updateDoc(doc(db, "users", uid, "tasks", task.id), patch);
+    updatedTask = { ...task, ...patch, lastCompletedAt: completedAt, updatedAt: completedAt };
   } else {
     await deleteDoc(doc(db, "users", uid, "tasks", task.id));
   }
 
   await cancelPendingReminders(uid, task.id);
 
-  return { ...task, id: completedId, originalTaskId: task.id, deletedAt: completedAt };
+  const completedEntry = { ...task, id: completedId, originalTaskId: task.id, deletedAt: completedAt };
+  return { completedEntry, updatedTask };
 }
 
 // 既存 tasks-data.js の setTaskStatus と同じ仕様：statusフィールドだけを更新する

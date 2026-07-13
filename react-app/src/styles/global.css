@@ -442,6 +442,11 @@ button:hover {
   color: var(--later);
 }
 
+.status-pill.status-cycle-done {
+  background: rgba(31, 157, 115, 0.14);
+  color: var(--success);
+}
+
 .meta-pill-row {
   display: flex;
   flex-wrap: wrap;

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useTasks, useRecentCompletedTasks, useLabelNames } from "../hooks/useTasks.js";
 import { computeCompletionStats } from "../utils/statsUtils.js";
 import { computeUserStatusStats, getUserStatusesFromStats, computeWeeklyProgress } from "../utils/userStatusUtils.js";
-import { normalizeImportance } from "../utils/taskLabels.js";
+import { normalizeImportance, getRepeatCycleStatus } from "../utils/taskLabels.js";
 import { celebrateCompletion } from "../utils/celebrate.js";
 import MetaPillRow from "../components/MetaPillRow.jsx";
 
@@ -141,7 +141,10 @@ function HomePage() {
     }
   }
 
-  const activeTasks = tasks.filter(isActiveTask);
+  // 繰り返しタスクは今回分を完了済み（次のdueDateが来ていない）なら、ホーム画面には出さない。
+  // 統計（下のcomputeXxxStats系）はこのフィルタの影響を受けない：tasksをそのまま渡す。
+  const visibleTasks = tasks.filter((task) => !getRepeatCycleStatus(task));
+  const activeTasks = visibleTasks.filter(isActiveTask);
   const nextTask = pickNextTask(activeTasks);
   const todaysActive = activeTasks.filter(isTodayTask).filter((task) => !nextTask || task.id !== nextTask.id);
 
