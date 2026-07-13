@@ -192,9 +192,15 @@ function getRecentCompletedTasks(completedTasks, rangeStart, rangeEnd) {
   return completedTasks.filter((task) => inRange(getCompletedDate(task), rangeStart, rangeEnd));
 }
 
-function isCompletionTargetTask(task, rangeStart, rangeEnd) {
+// dueDate は「締切が既に到来している（now以前）」場合のみノルマに含める。
+// 未到来の締切をノルマに含めると、①まだ来ていない締切分だけ達成率が不当に下がる、
+// ②繰り返しタスクを完了した直後に次回分の期日(未来)がまだ今週内だと、
+//   「完了記録」と「次回分の未完了タスク」を二重にノルマとして数えてしまう、という2つの不具合が出る。
+function isCompletionTargetTask(task, rangeStart, rangeEnd, now) {
+  const dueDate = getDueDate(task);
+  const isDueTarget = inRange(dueDate, rangeStart, rangeEnd) && dueDate <= now;
   return (
-    inRange(getDueDate(task), rangeStart, rangeEnd) ||
+    isDueTarget ||
     inRange(getRegisteredDate(task), rangeStart, rangeEnd) ||
     inRange(getCompletedDate(task), rangeStart, rangeEnd)
   );
@@ -210,20 +216,20 @@ function getTaskKey(source, task, index) {
   return `${source}:index:${index}`;
 }
 
-function addCompletionTargetTask(targetTaskKeys, source, task, index, rangeStart, rangeEnd) {
-  if (!isCompletionTargetTask(task, rangeStart, rangeEnd)) return;
+function addCompletionTargetTask(targetTaskKeys, source, task, index, rangeStart, rangeEnd, now) {
+  if (!isCompletionTargetTask(task, rangeStart, rangeEnd, now)) return;
   targetTaskKeys.add(getTaskKey(source, task, index));
 }
 
-function countCompletionTargetTasks(activeTasks, completedTasks, rangeStart, rangeEnd) {
+function countCompletionTargetTasks(activeTasks, completedTasks, rangeStart, rangeEnd, now) {
   const targetTaskKeys = new Set();
 
   activeTasks.forEach((task, index) => {
-    addCompletionTargetTask(targetTaskKeys, "active", task, index, rangeStart, rangeEnd);
+    addCompletionTargetTask(targetTaskKeys, "active", task, index, rangeStart, rangeEnd, now);
   });
 
   completedTasks.forEach((task, index) => {
-    addCompletionTargetTask(targetTaskKeys, "completed", task, index, rangeStart, rangeEnd);
+    addCompletionTargetTask(targetTaskKeys, "completed", task, index, rangeStart, rangeEnd, now);
   });
 
   return targetTaskKeys.size;
@@ -306,7 +312,7 @@ export function computeUserStatusStats(tasks, completedTasks, now = new Date()) 
   const postponedRecentTasksCount = recentTaskPool.filter((task) => getLaterCount(task) > 0).length;
   const totalLaterCount = recentTaskPool.reduce((sum, task) => sum + getLaterCount(task), 0);
 
-  const completionTargetCount = countCompletionTargetTasks(activeTasks, completedTaskList, recentStart, recentEnd);
+  const completionTargetCount = countCompletionTargetTasks(activeTasks, completedTaskList, recentStart, recentEnd, currentDate);
   const completionRate = completionTargetCount > 0 ? round(weeklyCompletedCount / completionTargetCount, 4) : null;
 
   return {
@@ -326,6 +332,43 @@ export function computeUserStatusStats(tasks, completedTasks, now = new Date()) 
   };
 }
 
+// 指定した期間[rangeStart, rangeEnd)における進み具合を集計する共通処理。
+// computeWeeklyProgress（暦週）と computeMonthlyProgress（直近N日）の両方から呼ばれる。
+function computeRangeProgress(activeTasks, completedTaskList, rangeStart, rangeEnd, currentDate) {
+  const rangeCompletedTasks = completedTaskList.filter((task) => inRange(getCompletedDate(task), rangeStart, rangeEnd));
+  const todayCompletedCount = rangeCompletedTasks.filter((task) => isSameDay(getCompletedDate(task), currentDate)).length;
+  const completedCount = rangeCompletedTasks.length;
+  const postponedCompletedCount = rangeCompletedTasks.filter((task) => getLaterCount(task) > 0).length;
+  const bestWeekdays = getBestWeekdays(rangeCompletedTasks);
+
+  const rangeTaskPool = activeTasks
+    .filter((task) => inRange(getRegisteredDate(task), rangeStart, rangeEnd))
+    .concat(rangeCompletedTasks);
+  const postponedTasksCount = rangeTaskPool.filter((task) => getLaterCount(task) > 0).length;
+
+  const completionTargetCount = countCompletionTargetTasks(activeTasks, completedTaskList, rangeStart, rangeEnd, currentDate);
+  const completionRate = completionTargetCount > 0 ? round(completedCount / completionTargetCount, 4) : null;
+
+  return {
+    todayCompletedCount,
+    completedCount,
+    postponedCompletedCount,
+    bestWeekdays,
+    completionTargetCount,
+    completionRate,
+    postponeRate: round(safeDivide(postponedTasksCount, rangeTaskPool.length), 4),
+    completedTasks: rangeCompletedTasks
+      .slice()
+      .sort((a, b) => getCompletedDate(b) - getCompletedDate(a))
+      .map((task) => ({
+        id: task.id,
+        name: getTaskName(task),
+        completedAt: getCompletedDate(task),
+        isFromLater: getLaterCount(task) > 0,
+      })),
+  };
+}
+
 // 「今週の進み具合」カード表示専用の集計。ステータス判定（computeUserStatusStats）とは別に、
 // 月曜0時起点の暦週でリセットする。バッジ判定側は移動窓のまま据え置き、月曜朝に実績が
 // 急に空になってステータスが乱高下するのを避ける。
@@ -337,29 +380,23 @@ export function computeWeeklyProgress(tasks, completedTasks, now = new Date()) {
   const weekStart = startOfWeek(currentDate);
   const weekEnd = addDays(weekStart, 7);
 
-  const weeklyCompletedTasks = completedTaskList.filter((task) => inRange(getCompletedDate(task), weekStart, weekEnd));
-  const todayCompletedCount = weeklyCompletedTasks.filter((task) => isSameDay(getCompletedDate(task), currentDate)).length;
-  const weeklyCompletedCount = weeklyCompletedTasks.length;
-  const postponedCompletedCount = weeklyCompletedTasks.filter((task) => getLaterCount(task) > 0).length;
-  const bestWeekdays = getBestWeekdays(weeklyCompletedTasks);
+  const { completedCount, ...rest } = computeRangeProgress(activeTasks, completedTaskList, weekStart, weekEnd, currentDate);
+  return { weeklyCompletedCount: completedCount, ...rest };
+}
 
-  const weeklyTaskPool = activeTasks
-    .filter((task) => inRange(getRegisteredDate(task), weekStart, weekEnd))
-    .concat(weeklyCompletedTasks);
-  const postponedWeeklyTasksCount = weeklyTaskPool.filter((task) => getLaterCount(task) > 0).length;
+// 実績画面（もっと見る）用：直近 days 日分（既定30日＝約1か月）の完了率・完了数・完了タスク名一覧。
+// 過去データを削除するわけではなく、毎回その場で期間を絞って集計するだけなので、
+// 期間を広げても遡って別途保存し直す必要はない。
+export function computeMonthlyProgress(tasks, completedTasks, now = new Date(), days = 30) {
+  const activeTasks = asArray(tasks);
+  const completedTaskList = asArray(completedTasks);
+  const currentDate = toDate(now) || new Date();
 
-  const completionTargetCount = countCompletionTargetTasks(activeTasks, completedTaskList, weekStart, weekEnd);
-  const completionRate = completionTargetCount > 0 ? round(weeklyCompletedCount / completionTargetCount, 4) : null;
+  const rangeEnd = addDays(startOfDay(currentDate), 1);
+  const rangeStart = addDays(startOfDay(currentDate), -(days - 1));
 
-  return {
-    todayCompletedCount,
-    weeklyCompletedCount,
-    postponedCompletedCount,
-    bestWeekdays,
-    completionTargetCount,
-    completionRate,
-    postponeRate: round(safeDivide(postponedWeeklyTasksCount, weeklyTaskPool.length), 4),
-  };
+  const { completedCount, ...rest } = computeRangeProgress(activeTasks, completedTaskList, rangeStart, rangeEnd, currentDate);
+  return { monthlyCompletedCount: completedCount, rangeDays: days, ...rest };
 }
 
 export function getUserStatusesFromStats(stats) {
