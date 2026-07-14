@@ -513,6 +513,133 @@ button:hover {
   cursor: not-allowed;
 }
 
+/* ===== タスクカードのレイアウト（左：完了円 / 中央：タップで編集 / 下部：あとでやる・削除） ===== */
+.task-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-card-main[role="button"] {
+  cursor: pointer;
+  border-radius: 14px;
+}
+
+.task-card-main[role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.task-complete-circle {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  max-width: none;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.task-complete-circle:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.task-complete-circle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.task-complete-circle.is-done {
+  border-color: var(--success);
+  background: var(--success);
+  color: #ffffff;
+}
+
+.task-complete-circle:disabled {
+  cursor: not-allowed;
+}
+
+.task-info.is-done h3 {
+  text-decoration: line-through;
+}
+
+.task-info.is-done {
+  opacity: 0.65;
+}
+
+.task-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-postpone-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.task-postpone-pill:hover {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.task-delete-icon {
+  width: 42px;
+  height: 42px;
+  min-width: 0;
+  max-width: none;
+  flex-shrink: 0;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.task-delete-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.task-delete-icon:hover,
+.task-delete-icon:focus-visible {
+  background: rgba(229, 72, 77, 0.12);
+  color: var(--danger);
+}
+
 /* ===== 完了時の達成メッセージ（トースト） ===== */
 .completion-toast {
   position: fixed;
@@ -769,6 +896,13 @@ button:hover {
   color: var(--text-dim);
   margin: 0 0 12px;
   padding: 0 2px;
+}
+
+/* 未完了タスクと完了済みタスクの境目をはっきりさせるための区切り線（タスク一覧画面の「完了済み」見出し用）。 */
+.task-list-completed-title {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
 
 .user-status-card {

@@ -55,7 +55,12 @@ export function useRecentCompletedTasks(days = 14) {
     };
   }, [currentUser, days]);
 
-  return { completedTasks, isLoading, error };
+  async function removeCompletedTask(completedTaskId) {
+    await deleteCompletedTaskInFirestore(currentUser.uid, completedTaskId);
+    setCompletedTasks((prev) => prev.filter((t) => t.id !== completedTaskId));
+  }
+
+  return { completedTasks, isLoading, error, removeCompletedTask };
 }
 
 // ログイン中ユーザーの未完了タスク一覧を取得するフック。

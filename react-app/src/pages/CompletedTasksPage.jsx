@@ -54,8 +54,8 @@ function CompletedTasksPage() {
     );
   }
 
+  // 削除確認ダイアログはTaskCard側(削除アイコン押下時)で表示済みのため、ここでは実行するだけ。
   async function handleDelete(task) {
-    if (!window.confirm("この完了済みタスクを削除しますか？この操作は取り消せません。")) return;
     try {
       await removeCompletedTask(task.id);
     } catch (err) {

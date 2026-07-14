@@ -128,7 +128,6 @@ function HomePage() {
   }
 
   async function handleComplete(task) {
-    if (!window.confirm("このタスクを完了にしますか？")) return;
     try {
       const completedEntry = await completeTask(task);
       celebrateCompletion();

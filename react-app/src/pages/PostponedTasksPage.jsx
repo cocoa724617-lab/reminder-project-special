@@ -29,7 +29,6 @@ function PostponedTasksPage() {
   }
 
   async function handleComplete(task) {
-    if (!window.confirm("このタスクを完了にしますか？")) return;
     try {
       await completeTask(task);
       celebrateCompletion();
@@ -39,8 +38,8 @@ function PostponedTasksPage() {
     }
   }
 
+  // 削除確認ダイアログはTaskCard側(削除アイコン押下時)で表示済みのため、ここでは実行するだけ。
   async function handleDelete(task) {
-    if (!window.confirm("このタスクを削除しますか？この操作は取り消せません。")) return;
     try {
       await removeTask(task.id);
     } catch (err) {

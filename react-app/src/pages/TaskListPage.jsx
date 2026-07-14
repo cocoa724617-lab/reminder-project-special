@@ -22,7 +22,11 @@ function TaskListPage() {
   const navigate = useNavigate();
   // 通常タスクの完了履歴（完了済みセクション用）。繰り返しタスクの「今回分完了済みか」は
   // tasks側のlastCompletedAt/dueDateだけで判定できるためここでは使わない。
-  const { completedTasks: completedFromServer, isLoading: completedLoading } = useRecentCompletedTasks(14);
+  const {
+    completedTasks: completedFromServer,
+    isLoading: completedLoading,
+    removeCompletedTask,
+  } = useRecentCompletedTasks(14);
   // 通常タスクを完了した直後、再取得を待たずその場で完了済みセクションへ反映するための楽観的な追加分
   // （繰り返しタスクはtasks一覧側がそのまま更新されるのでここには積まない）。
   const [optimisticCompletions, setOptimisticCompletions] = useState([]);
@@ -45,7 +49,6 @@ function TaskListPage() {
   }
 
   async function handleComplete(task) {
-    if (!window.confirm("このタスクを完了にしますか？")) return;
     try {
       const completedEntry = await completeTask(task);
       celebrateCompletion();
@@ -58,13 +61,23 @@ function TaskListPage() {
     }
   }
 
+  // 削除確認ダイアログはTaskCard側(削除アイコン押下時)で表示済みのため、ここでは実行するだけ。
   async function handleDelete(task) {
-    if (!window.confirm("このタスクを削除しますか？この操作は取り消せません。")) return;
     try {
       await removeTask(task.id);
     } catch (err) {
       console.error("タスクの削除に失敗しました:", err);
       alert("タスクの削除に失敗しました。時間をおいて再度お試しください。");
+    }
+  }
+
+  async function handleDeleteCompleted(entry) {
+    try {
+      await removeCompletedTask(entry.id);
+      setOptimisticCompletions((prev) => prev.filter((e) => e.id !== entry.id));
+    } catch (err) {
+      console.error("完了済みタスクの削除に失敗しました:", err);
+      alert("削除に失敗しました。時間をおいて再度お試しください。");
     }
   }
 
@@ -116,7 +129,7 @@ function TaskListPage() {
 
       {hasCompletedSection && (
         <>
-          <h2 className="home-section-title">完了済み</h2>
+          <h2 className="home-section-title task-list-completed-title">完了済み</h2>
           <div id="task-list-completed">
             {cycleCompletedTasks.map(({ task, cycleStatus }) => (
               <TaskCard
@@ -132,7 +145,13 @@ function TaskListPage() {
               />
             ))}
             {standaloneCompletedEntries.map((entry) => (
-              <TaskCard key={entry.id} task={entry} variant="completed" labelNames={labelNames} onDelete={undefined} />
+              <TaskCard
+                key={entry.id}
+                task={entry}
+                variant="completed"
+                labelNames={labelNames}
+                onDelete={handleDeleteCompleted}
+              />
             ))}
           </div>
         </>
