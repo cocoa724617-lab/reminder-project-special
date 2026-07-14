@@ -1,6 +1,6 @@
 // 既存 user-status.js の verbatim 移植。
 // 画像パスは react-app/public/assets/status/ にコピー済みの静的アセットを指す。
-import { startOfWeek } from "./dateUtils.js";
+import { startOfWeek, combineDueDateTime } from "./dateUtils.js";
 
 const RECENT_DAYS = 7;
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -51,7 +51,7 @@ export const STATUS_DEFINITIONS = {
   normalMode: {
     key: "normalMode",
     name: "通常運転中",
-    image: "",
+    image: "/assets/status/normal_mode.png",
     description: "少しずつタスクを進めていきましょう。",
   },
 };
@@ -125,6 +125,10 @@ function getRegisteredDate(task) {
 }
 
 function getDueDate(task) {
+  if (task && task.dueDate && task.dueTime) {
+    const combined = combineDueDateTime(task.dueDate, task.dueTime);
+    if (combined) return combined;
+  }
   return firstDateFrom(task, ["dueDate", "notifyDate", "time"]);
 }
 

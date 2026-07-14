@@ -24,6 +24,20 @@ export function formatDateTimeJa(value, emptyLabel = "未定") {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${hh}:${mm}`;
 }
 
+// dueDate("YYYY-MM-DD")とdueTime("HH:MM")を組み合わせてローカル時刻のDateを作る。
+// new Date(`${dueDate}T${dueTime}`)は形式次第でUTC/ローカルの解釈がぶれるため、年月日時分を明示して構築する。
+export function combineDueDateTime(dueDateStr, dueTimeStr) {
+  const dateMatch = String(dueDateStr || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateMatch) return null;
+
+  const timeMatch = String(dueTimeStr || "").match(/^(\d{1,2}):(\d{1,2})$/);
+  const hour = timeMatch ? Number(timeMatch[1]) : 0;
+  const minute = timeMatch ? Number(timeMatch[2]) : 0;
+
+  const [, y, m, d] = dateMatch;
+  return new Date(Number(y), Number(m) - 1, Number(d), hour, minute);
+}
+
 export function isSameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }

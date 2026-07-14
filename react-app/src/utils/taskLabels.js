@@ -1,7 +1,7 @@
 // 既存 task-labels.js の色ラベル定義・正規化ロジックの移植。
 // 元ファイルはモジュールスコープの customLabelNames を setCustomLabelNames() で書き換える設計だが、
 // Reactの再レンダリングとは相性が悪いため、customLabelNames は引数として明示的に渡す形にしている。
-import { toDate } from "./dateUtils.js";
+import { toDate, combineDueDateTime } from "./dateUtils.js";
 
 export const TASK_LABELS = {
   none: { name: "ラベルなし", color: "#c7c7cc" },
@@ -64,7 +64,7 @@ export function getRepeatCycleStatus(task, now = new Date()) {
   if (!isRepeatingTask(task)) return null;
   if (!task.lastCompletedAt) return null;
 
-  const nextDueDate = toDate(task.dueDate);
+  const nextDueDate = task.dueTime ? combineDueDateTime(task.dueDate, task.dueTime) : toDate(task.dueDate);
   if (!nextDueDate) return null;
 
   const currentDate = toDate(now) || new Date();

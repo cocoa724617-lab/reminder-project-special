@@ -6,12 +6,15 @@ admin.initializeApp();
 
 const db = admin.firestore();
 
-// 頻度ごとの「1日あたり平均何回か」の目安。連鎖式では厳密な回数ではなく平均間隔として使う。
+// 頻度ごとの「1日あたり平均何回か」の目安（回数指定がない旧frequencyのタスク用）
 const FREQUENCY_AVERAGE_PER_DAY = {
   small: 1.5,
   medium: 3.5,
   large: 6
 };
+
+// 通知同士を最低これだけ離す
+const MIN_GAP_MINUTES = 60;
 
 function normalizeFrequencyCount(value) {
   const count = Number(value);
@@ -34,8 +37,12 @@ function getFrequencySpec(task) {
   };
 }
 
-function randomFloat(min, max) {
-  return Math.random() * (max - min) + min;
+// 平均回数(3.5回など)を、その期間の実際の回数(3回or4回)に確率的に丸める
+function resolveOccurrenceCount(avgCount) {
+  const floor = Math.floor(avgCount);
+  const frac = avgCount - floor;
+  const bonus = Math.random() < frac ? 1 : 0;
+  return Math.max(1, floor + bonus);
 }
 
 function timeStringToMinutes(timeStr) {
@@ -61,50 +68,103 @@ function isMinuteAllowed(minuteOfDay, startMinutes, endMinutes, excludeTimes) {
   return isInRange(minuteOfDay, startMinutes, endMinutes) && !isExcluded(minuteOfDay, excludeTimes);
 }
 
-function getJstMinuteOfDay(date) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
+// JSTは常にUTC+9(サマータイムなし)なので、暦日+分オフセットから直接UTCのDateを作れる
+function jstCalendarMinuteToUtcDate(y, m, d, minuteOfDay) {
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - 9 * 60 * 60000 + minuteOfDay * 60000);
+}
+
+function getJstDateParts(date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
   }).formatToParts(date);
-  const h = Number(parts.find((p) => p.type === "hour").value) % 24;
-  const m = Number(parts.find((p) => p.type === "minute").value);
-  return h * 60 + m;
+  return {
+    y: Number(parts.find((p) => p.type === "year").value),
+    m: Number(parts.find((p) => p.type === "month").value),
+    d: Number(parts.find((p) => p.type === "day").value)
+  };
 }
 
-// candidateが許可時間帯外なら、1分刻みで次に許可される瞬間まで進める（最大24時間分）
-function snapToAllowedInstant(candidate, startMinutes, endMinutes, excludeTimes) {
-  const d = new Date(candidate.getTime());
-  for (let i = 0; i < 1440; i++) {
-    if (isMinuteAllowed(getJstMinuteOfDay(d), startMinutes, endMinutes, excludeTimes)) {
-      return d;
-    }
-    d.setTime(d.getTime() + 60000);
+// 月曜=0, 日曜=6
+function getJstMondayIndex(date) {
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", weekday: "short" }).format(date);
+  const map = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+  return map[weekday];
+}
+
+// 指定日(JST)が属する週の月曜日を求める(年月日はカレンダー上のラベルとして扱うのでUTC演算でよい)
+function getJstWeekStartParts(date) {
+  const { y, m, d } = getJstDateParts(date);
+  const mondayUtcMs = Date.UTC(y, m - 1, d) - getJstMondayIndex(date) * 86400000;
+  const monday = new Date(mondayUtcMs);
+  return { y: monday.getUTCFullYear(), m: monday.getUTCMonth() + 1, d: monday.getUTCDate() };
+}
+
+function computeScheduleKey(unit, referenceDate) {
+  const { y, m, d } = unit === "week" ? getJstWeekStartParts(referenceDate) : getJstDateParts(referenceDate);
+  const prefix = unit === "week" ? "week" : "day";
+  return `${prefix}-${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+// 指定した暦日(JST)の許可時間帯に入る1分刻みの候補時刻を列挙する
+function buildAllowedInstantsForJstDate(y, m, d, startMinutes, endMinutes, excludeTimes, afterDate) {
+  const instants = [];
+  for (let minute = 0; minute < 1440; minute++) {
+    if (!isMinuteAllowed(minute, startMinutes, endMinutes, excludeTimes)) continue;
+    const instant = jstCalendarMinuteToUtcDate(y, m, d, minute);
+    if (afterDate && instant <= afterDate) continue;
+    instants.push(instant);
   }
-  return null;
+  return instants;
 }
 
-function computeNextRemindAt(now, task, settings) {
-  const startMinutes = timeStringToMinutes(settings.startTime || "09:00");
-  const endMinutes = timeStringToMinutes(settings.endTime || "21:00");
-  if (startMinutes === endMinutes) return null;
+// 頻度の単位(日/週)に応じて、対象期間の許可時間帯の候補時刻をすべて集める
+function buildScheduleCandidates(unit, referenceDate, startMinutes, endMinutes, excludeTimes, afterDate) {
+  if (unit === "week") {
+    const { y, m, d } = getJstWeekStartParts(referenceDate);
+    let candidates = [];
+    for (let offset = 0; offset < 7; offset++) {
+      const dayDate = new Date(Date.UTC(y, m - 1, d) + offset * 86400000);
+      candidates = candidates.concat(
+        buildAllowedInstantsForJstDate(
+          dayDate.getUTCFullYear(),
+          dayDate.getUTCMonth() + 1,
+          dayDate.getUTCDate(),
+          startMinutes,
+          endMinutes,
+          excludeTimes,
+          afterDate
+        )
+      );
+    }
+    return candidates;
+  }
 
-  let windowMinutes = endMinutes - startMinutes;
-  if (windowMinutes <= 0) windowMinutes += 1440;
-
-  const frequencySpec = getFrequencySpec(task);
-  const avgIntervalMinutes = frequencySpec.unit === "week"
-    ? (7 * 24 * 60) / frequencySpec.count
-    : windowMinutes / frequencySpec.count;
-  const intervalMinutes = randomFloat(avgIntervalMinutes * 0.5, avgIntervalMinutes * 1.5);
-
-  const candidate = new Date(now.getTime() + intervalMinutes * 60000);
-  return snapToAllowedInstant(candidate, startMinutes, endMinutes, settings.excludeTimes);
+  const { y, m, d } = getJstDateParts(referenceDate);
+  return buildAllowedInstantsForJstDate(y, m, d, startMinutes, endMinutes, excludeTimes, afterDate);
 }
 
-function reminderChainDocId(uid, taskId) {
-  return `${uid}_${taskId}`;
+// 候補の中からn個を、間隔がなるべく均等になるようバケット分割してランダムに選び、
+// 最低間隔(MIN_GAP_MINUTES)を下回る場合は後ろにずらす
+function pickSpreadTimes(candidates, n) {
+  if (candidates.length === 0 || n <= 0) return [];
+  const count = Math.min(n, candidates.length);
+  const bucketSize = candidates.length / count;
+  const picks = [];
+  for (let i = 0; i < count; i++) {
+    const start = Math.floor(i * bucketSize);
+    const end = Math.floor((i + 1) * bucketSize);
+    const idx = Math.min(start + Math.floor(Math.random() * Math.max(1, end - start)), candidates.length - 1);
+    picks.push(candidates[idx]);
+  }
+  picks.sort((a, b) => a.getTime() - b.getTime());
+  for (let i = 1; i < picks.length; i++) {
+    const minNext = picks[i - 1].getTime() + MIN_GAP_MINUTES * 60000;
+    if (picks[i].getTime() < minNext) picks[i] = new Date(minNext);
+  }
+  return picks;
 }
 
 function isChainableTask(task) {
@@ -113,68 +173,126 @@ function isChainableTask(task) {
   return !!task && task.status !== "完了" && (hasCountFrequency || hasLegacyFrequency) && task.enabled !== false;
 }
 
-async function scheduleNextReminder(uid, taskId, task, userData, afterDate) {
+// タスクと通知設定から、対象期間(日/週)にばら撒く通知時刻の一覧を計算する
+function computeBatchSchedule(task, settings, referenceDate, afterDate) {
+  const startMinutes = timeStringToMinutes(settings.startTime || "09:00");
+  const endMinutes = timeStringToMinutes(settings.endTime || "21:00");
+  if (startMinutes === endMinutes) return { scheduleKey: null, times: [] };
+
+  const frequencySpec = getFrequencySpec(task);
+  const occurrences = resolveOccurrenceCount(frequencySpec.count);
+  const scheduleKey = computeScheduleKey(frequencySpec.unit, referenceDate);
+  const candidates = buildScheduleCandidates(
+    frequencySpec.unit,
+    referenceDate,
+    startMinutes,
+    endMinutes,
+    settings.excludeTimes,
+    afterDate
+  );
+
+  return { scheduleKey, times: pickSpreadTimes(candidates, occurrences) };
+}
+
+// 対象タスクの未通知バッチ予約をすべて作り直す(タスク編集時、および毎日/毎週の再生成時に呼ぶ)
+async function regenerateTaskBatch(uid, taskId, task, userData, now) {
   if (!userData || !userData.fcmToken) return;
   if (!isChainableTask(task)) return;
 
   const settings = userData.notificationSettings || {};
   if (settings.enabled === false) return;
 
-  const remindAt = computeNextRemindAt(afterDate, task, settings);
-  if (!remindAt) {
+  const { scheduleKey, times } = computeBatchSchedule(task, settings, now, now);
+
+  const existing = await db
+    .collection("reminders")
+    .where("uid", "==", uid)
+    .where("taskId", "==", taskId)
+    .where("kind", "==", "batch")
+    .where("notified", "==", false)
+    .get();
+  await Promise.all(existing.docs.map((d) => d.ref.delete()));
+
+  if (!scheduleKey || times.length === 0) {
     console.log(`許可時間帯が見つからずスケジュールをスキップ: uid=${uid}, taskId=${taskId}`);
     return;
   }
 
-  await db.collection("reminders").doc(reminderChainDocId(uid, taskId)).set({
-    uid,
-    taskId,
-    title: task.title || task.name || "リマインダー",
-    body: "リマインダーの時間です",
-    remindAt: admin.firestore.Timestamp.fromDate(remindAt),
-    fcmToken: userData.fcmToken,
-    notified: false,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-  });
+  const title = task.title || task.name || "リマインダー";
+  await Promise.all(
+    times.map((remindAt) =>
+      db.collection("reminders").add({
+        uid,
+        taskId,
+        kind: "batch",
+        scheduleKey,
+        title,
+        body: "リマインダーの時間です",
+        remindAt: admin.firestore.Timestamp.fromDate(remindAt),
+        fcmToken: userData.fcmToken,
+        notified: false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      })
+    )
+  );
 }
 
-// タスクの作成・更新・削除のたびに、連鎖予約を作り直す
+// タスクの作成・更新・削除のたびに、そのタスクのバッチ予約を作り直す
 exports.onTaskWritten = onDocumentWritten("users/{uid}/tasks/{taskId}", async (event) => {
   const { uid, taskId } = event.params;
   const after = event.data.after.exists ? event.data.after.data() : null;
-  const chainDocId = reminderChainDocId(uid, taskId);
 
   if (!isChainableTask(after)) {
-    // タスクが削除・完了・無効化・単発通知(頻度なし)になった場合は、連鎖予約と古い単発予約の両方を止める
+    // タスクが削除・完了・無効化・単発通知(頻度なし)になった場合は、未通知のバッチ予約を止める
+    // 「この日時に必ず通知する」個別リマインダー(kind === "fixed")はここでは消さない
     const stale = await db
       .collection("reminders")
       .where("uid", "==", uid)
       .where("taskId", "==", taskId)
+      .where("kind", "==", "batch")
       .where("notified", "==", false)
       .get();
     await Promise.all(stale.docs.map((d) => d.ref.delete()));
     return;
   }
 
-  // 頻度なし→頻度ありに切り替わった場合に、古い単発予約が残らないようにする
-  // ただし「この日時に必ず通知する」個別リマインダー(kind === "fixed")は、
-  // タスク保存時にクライアント側(saveFixedReminders)で作り直す意図的な予約なので消さない
-  const staleOneOff = await db
-    .collection("reminders")
-    .where("uid", "==", uid)
-    .where("taskId", "==", taskId)
-    .where("notified", "==", false)
-    .get();
-  await Promise.all(
-    staleOneOff.docs
-      .filter((d) => d.id !== chainDocId && d.data().kind !== "fixed")
-      .map((d) => d.ref.delete())
-  );
-
   const userSnap = await db.collection("users").doc(uid).get();
   const userData = userSnap.exists ? userSnap.data() : null;
-  await scheduleNextReminder(uid, taskId, after, userData, new Date());
+  await regenerateTaskBatch(uid, taskId, after, userData, new Date());
 });
+
+// 毎日0:05(JST)に、日単位タスクは当日分、週単位タスクは月曜のみ週全体分のバッチ予約を作り直す
+exports.regenerateReminderSchedules = onSchedule(
+  {
+    schedule: "5 0 * * *",
+    timeZone: "Asia/Tokyo"
+  },
+  async () => {
+    const now = new Date();
+    const isMonday = getJstMondayIndex(now) === 0;
+
+    const tasksSnap = await db.collectionGroup("tasks").get();
+    const userDataCache = new Map();
+
+    const promises = tasksSnap.docs.map(async (taskDoc) => {
+      const task = taskDoc.data();
+      if (!isChainableTask(task)) return;
+
+      const frequencySpec = getFrequencySpec(task);
+      if (frequencySpec.unit === "week" && !isMonday) return;
+
+      const uid = taskDoc.ref.parent.parent.id;
+      if (!userDataCache.has(uid)) {
+        const userSnap = await db.collection("users").doc(uid).get();
+        userDataCache.set(uid, userSnap.exists ? userSnap.data() : null);
+      }
+
+      await regenerateTaskBatch(uid, taskDoc.id, task, userDataCache.get(uid), now);
+    });
+
+    await Promise.all(promises);
+  }
+);
 
 exports.sendReminderNotifications = onSchedule(
   {
@@ -195,7 +313,6 @@ exports.sendReminderNotifications = onSchedule(
 
     const promises = snapshot.docs.map(async (doc) => {
       const data = doc.data();
-      const isChainSlot = doc.id === reminderChainDocId(data.uid, data.taskId);
 
       const taskRef = db.collection("users").doc(data.uid).collection("tasks").doc(data.taskId);
       const taskSnap = await taskRef.get();
@@ -227,16 +344,8 @@ exports.sendReminderNotifications = onSchedule(
         console.log("fcmTokenがない。送信スキップ:", doc.id);
       }
 
-      if (!isChainSlot) {
-        // 単発通知（頻度なし）は1回きりなので削除して終わり
-        await doc.ref.delete();
-        return;
-      }
-
-      // 頻度ありタスクの連鎖予約は、次の1件を計算して同じdocを上書きする
-      const userSnap = await db.collection("users").doc(data.uid).get();
-      const userData = userSnap.exists ? userSnap.data() : null;
-      await scheduleNextReminder(data.uid, data.taskId, task, userData, new Date());
+      // バッチ予約は日/週ぶんまとめて事前に作成済みなので、送信後はこの1件を消すだけでよい
+      await doc.ref.delete();
     });
 
     await Promise.all(promises);

@@ -5,6 +5,8 @@ import { useTask, useLabelNames } from "../hooks/useTasks.js";
 import { useFcmToken } from "../hooks/useFcmToken.js";
 import { saveTask, deleteTask, saveFixedReminders, clearFixedReminders } from "../services/taskService.js";
 import { TASK_LABELS, getTaskLabel, normalizeImportance, normalizeUrgency } from "../utils/taskLabels.js";
+import CalendarDatePicker from "../components/CalendarDatePicker.jsx";
+import TimeSelect from "../components/TimeSelect.jsx";
 
 function clampFrequencyCount(value) {
   const parsed = parseInt(value, 10);
@@ -34,6 +36,8 @@ const emptyFormState = {
   urgency: "today",
   description: "",
   dueDate: "",
+  dueTimeEnabled: false,
+  dueTime: "18:00",
   repeatEnabled: false,
   repeatFrequency: "weekly",
   notifyEnabled: true,
@@ -54,6 +58,8 @@ function buildFormFromTask(existingTask) {
     urgency: normalizeUrgency(existingTask.urgency),
     description: existingTask.description || existingTask.memo || "",
     dueDate: existingTask.dueDate || existingTask.date || "",
+    dueTimeEnabled: !!existingTask.dueTime,
+    dueTime: existingTask.dueTime || "18:00",
     repeatEnabled: !!existingTask.repeat && existingTask.repeat !== "none",
     repeatFrequency: existingTask.repeat && existingTask.repeat !== "none" ? existingTask.repeat : "weekly",
     notifyEnabled: existingTask.enabled !== false,
@@ -151,6 +157,7 @@ function TaskFormPage() {
       urgency: form.urgency,
       color: form.color,
       dueDate: form.dueDate || null,
+      dueTime: form.dueTimeEnabled ? form.dueTime : null,
       repeat: form.repeatEnabled ? form.repeatFrequency : "none",
       fixedReminders: completeFixedReminders,
     };
@@ -257,16 +264,29 @@ function TaskFormPage() {
             <button type="button" className="due-side-button" aria-label="前日" onClick={() => shiftDueDate(-1)}>
               ‹
             </button>
-            <input
-              type="date"
-              className="due-date-button"
-              value={form.dueDate}
-              onChange={(event) => updateField("dueDate", event.target.value)}
-            />
+            <span className="due-date-value">{form.dueDate || "未設定"}</span>
             <button type="button" className="due-side-button" aria-label="翌日" onClick={() => shiftDueDate(1)}>
               ›
             </button>
           </div>
+          <CalendarDatePicker value={form.dueDate} onChange={(dateStr) => updateField("dueDate", dateStr)} />
+
+          <div className="modal-field-row due-time-toggle-row">
+            <span className="modal-field-label">時刻を指定する</span>
+            <label className="ios-toggle">
+              <input
+                type="checkbox"
+                checked={form.dueTimeEnabled}
+                onChange={(event) => updateField("dueTimeEnabled", event.target.checked)}
+              />
+              <span className="ios-toggle-track">
+                <span className="ios-toggle-thumb"></span>
+              </span>
+            </label>
+          </div>
+          {form.dueTimeEnabled && (
+            <TimeSelect value={form.dueTime} onChange={(timeStr) => updateField("dueTime", timeStr)} />
+          )}
         </div>
 
         <div className="modal-field modal-field-row">
@@ -350,25 +370,26 @@ function TaskFormPage() {
           <span className="modal-field-label">この日時に必ず通知する</span>
           <div className="fixed-reminder-list">
             {form.fixedReminders.map((reminder, index) => (
-              <div className="fixed-reminder-row" key={index}>
-                <input
-                  type="date"
+              <div className="fixed-reminder-card" key={index}>
+                <div className="fixed-reminder-row">
+                  <span className="fixed-reminder-value">{reminder.date || "日付未選択"}</span>
+                  <TimeSelect
+                    value={reminder.time}
+                    onChange={(timeStr) => updateFixedReminder(index, "time", timeStr)}
+                  />
+                  <button
+                    type="button"
+                    className="fixed-reminder-remove"
+                    aria-label="この日時を削除"
+                    onClick={() => removeFixedReminder(index)}
+                  >
+                    ×
+                  </button>
+                </div>
+                <CalendarDatePicker
                   value={reminder.date}
-                  onChange={(event) => updateFixedReminder(index, "date", event.target.value)}
+                  onChange={(dateStr) => updateFixedReminder(index, "date", dateStr)}
                 />
-                <input
-                  type="time"
-                  value={reminder.time}
-                  onChange={(event) => updateFixedReminder(index, "time", event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="fixed-reminder-remove"
-                  aria-label="この日時を削除"
-                  onClick={() => removeFixedReminder(index)}
-                >
-                  ×
-                </button>
               </div>
             ))}
           </div>

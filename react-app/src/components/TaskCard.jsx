@@ -20,7 +20,7 @@ function getReminderLabel(task) {
     return `ランダム通知・${freqLabel}`;
   }
   if (task.dueDate || task.date) {
-    return `期限：${task.dueDate || task.date}`;
+    return `期限：${task.dueDate || task.date}${task.dueTime ? " " + task.dueTime : ""}`;
   }
   return "日時未設定";
 }
@@ -96,7 +96,10 @@ function TaskCard({
 
         {isPostponed ? (
           <>
-            <p className="task-remind">元の期限：{task.dueDate || task.date || "未設定"}</p>
+            <p className="task-remind">
+              元の期限：{task.dueDate || task.date || "未設定"}
+              {task.dueTime ? ` ${task.dueTime}` : ""}
+            </p>
             <MetaPillRow task={task} labelNames={labelNames} />
             <p className="task-memo">メモ：{memo || "なし"}</p>
             <p className="task-memo">あとでやるにした時間：{task.laterTime || "未設定"}</p>

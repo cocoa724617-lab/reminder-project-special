@@ -26,7 +26,7 @@ function getReminderLabel(task) {
     return `ランダム通知・${freqLabel}`;
   }
   if (task.dueDate || task.date) {
-    return `期限：${task.dueDate || task.date}`;
+    return `期限：${task.dueDate || task.date}${task.dueTime ? " " + task.dueTime : ""}`;
   }
   return "日時未設定";
 }
