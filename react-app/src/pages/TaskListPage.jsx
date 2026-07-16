@@ -54,7 +54,7 @@ function TaskListPage() {
 
   async function handleComplete(task) {
     try {
-      const completedEntry = await completeTask(task);
+      const { completedEntry } = await completeTask(task);
       celebrateCompletion();
       if (completedEntry) {
         setOptimisticCompletions((prev) => [completedEntry, ...prev]);

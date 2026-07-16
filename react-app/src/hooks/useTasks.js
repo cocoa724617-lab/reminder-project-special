@@ -10,7 +10,7 @@ import {
   deleteCompletedTask as deleteCompletedTaskInFirestore,
   fetchUserLabelNames,
 } from "../services/taskService.js";
-import { fetchDiscoveredStatuses, saveDiscoveredStatuses } from "../services/userService.js";
+import { fetchDiscoveredStatuses, saveDiscoveredStatuses, fetchUserData } from "../services/userService.js";
 import { discoverStatusKeys } from "../utils/userStatusUtils.js";
 
 // ログイン中ユーザーの直近 days 日分の完了済みタスクを取得するフック。
@@ -113,11 +113,11 @@ export function useTasks() {
   // 繰り返しタスクは Firestore 上では削除されず更新されるだけなので、ローカル一覧からも
   // 削除するのではなく updatedTask の内容で差し替える（通常タスクは従来通り一覧から取り除く）。
   async function completeTask(task) {
-    const { completedEntry, updatedTask } = await completeTaskInFirestore(currentUser.uid, task);
+    const { completedEntry, updatedTask, streak } = await completeTaskInFirestore(currentUser.uid, task);
     setTasks((prev) =>
       updatedTask ? prev.map((t) => (t.id === task.id ? updatedTask : t)) : prev.filter((t) => t.id !== task.id),
     );
-    return completedEntry;
+    return { completedEntry, streak };
   }
 
   async function removeTask(taskId) {
@@ -286,6 +286,56 @@ export function useDiscoveredStatuses() {
   const clearNewlyDiscovered = useCallback(() => setNewlyDiscovered([]), []);
 
   return { discoveredKeys, isLoaded, recordDiscoveries, newlyDiscovered, clearNewlyDiscovered };
+}
+
+// 連続達成日数（ストリーク）表示用：users/{uid}.streakCurrent / streakLongest を取得する。
+// タスク完了直後は再取得を待たず、completeTask()が返す最新値をそのまま反映できるよう
+// applyStreak を公開する（taskService.completeTask内のトランザクションで既に計算済みのため）。
+export function useStreak() {
+  const { currentUser } = useAuth();
+  const [streak, setStreak] = useState({ current: 0, longest: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function load() {
+      if (!currentUser) {
+        if (!isCancelled) {
+          setStreak({ current: 0, longest: 0 });
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const userData = await fetchUserData(currentUser.uid);
+        if (!isCancelled) {
+          setStreak({
+            current: Number(userData && userData.streakCurrent) || 0,
+            longest: Number(userData && userData.streakLongest) || 0,
+          });
+        }
+      } catch (err) {
+        console.error("連続達成日数の取得に失敗しました:", err);
+      } finally {
+        if (!isCancelled) setIsLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser]);
+
+  const applyStreak = useCallback((nextStreak) => {
+    if (!nextStreak) return;
+    setStreak({ current: nextStreak.current || 0, longest: nextStreak.longest || 0 });
+  }, []);
+
+  return { streak, isLoading, applyStreak };
 }
 
 // タスク登録・編集フォーム用：taskId が指定されている間だけ既存タスクを1件取得する

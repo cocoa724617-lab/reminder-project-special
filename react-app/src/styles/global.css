@@ -1046,6 +1046,40 @@ button:disabled {
   padding-bottom: 96px;
 }
 
+/* ===== 連続達成日数（ストリーク） ===== */
+.streak-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 720px;
+  margin: 0 auto 20px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(var(--later-rgb), 0.12);
+  border: 1px solid rgba(var(--later-rgb), 0.35);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.streak-banner-flame {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.streak-banner-text strong {
+  color: var(--later);
+  font-size: 16px;
+}
+
+.streak-banner-best {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
 .home-section {
   max-width: 720px;
   margin: 0 auto 28px;

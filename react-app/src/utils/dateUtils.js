@@ -51,3 +51,12 @@ export function startOfWeek(date) {
   d.setDate(d.getDate() - diffToMonday);
   return d;
 }
+
+// 連続達成日数（ストリーク）判定用：ローカル日付を"YYYY-MM-DD"にする。
+// このファイルの他の関数と同じく、デバイスのローカル時刻をそのまま使う想定（日本語圏ユーザー前提）。
+export function toDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}

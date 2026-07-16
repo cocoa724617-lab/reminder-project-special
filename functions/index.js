@@ -1,5 +1,6 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -559,12 +560,19 @@ exports.sendReminderNotifications = onSchedule(
       if (data.fcmToken) {
         try {
           // notificationフィールドを使うとブラウザが自動表示し、SW側のonBackgroundMessageでの
-          // 手動表示と重複して二重通知になるため、dataのみで送りSW側の表示に一本化する
+          // 手動表示と重複して二重通知になるため、dataのみで送りSW側の表示に一本化する。
+          // taskIdを含めるのは、SW側で「完了」「1時間後」のクイックアクションボタンを出すため
+          // （kind: "daily" のうっかり防止リマインダーはタスクに紐付かないため含めない）。
+          const messagePayload = {
+            title: notificationTitle,
+            body: data.body || "リマインダーの時間です"
+          };
+          if (data.kind !== "daily" && data.taskId) {
+            messagePayload.taskId = data.taskId;
+          }
+
           await admin.messaging().send({
-            data: {
-              title: notificationTitle,
-              body: data.body || "リマインダーの時間です"
-            },
+            data: messagePayload,
             token: data.fcmToken
           });
           console.log("通知送信成功:", doc.id);
@@ -582,3 +590,164 @@ exports.sendReminderNotifications = onSchedule(
     await Promise.all(promises);
   }
 );
+
+// ===== 通知のクイックアクション（プッシュ通知のアクションボタンから、アプリを開かずに実行する） =====
+// Service Worker（firebase-messaging-sw.js）がonCall経由でこれらを呼ぶ。呼び出し元はSW内で
+// 復元したFirebase Authセッションのidトークンで認証されるため、request.auth.uidだけを信頼して
+// そのユーザー自身のタスクだけを操作する（クライアントから渡されるuidは受け取らない）。
+//
+// completeTask / delayTaskWithLaterTime（react-app/src/services/taskService.js）と同じ処理内容を
+// Admin SDK側で再実装したもの。挙動を変える場合は両方を揃えること。
+
+// react-app/src/utils/dateUtils.js の toDateKey と同じ仕様だが、JSTで統一する必要があるため
+// （Cloud Functionsの実行環境はJSTとは限らないが、ストリークは「JSTユーザーの日付感覚」に
+// 合わせる必要がある）、getJstDateParts を使って組み立てる。
+function toDateKeyJst(date) {
+  const { y, m, d } = getJstDateParts(date);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+// taskService.js の computeNextStreak と同じロジック（変更する場合は両方揃えること）。
+function computeNextStreak({ lastDateKey, todayKey, yesterdayKey, currentStreak, longestStreak }) {
+  if (lastDateKey === todayKey) {
+    return { current: currentStreak, longest: longestStreak, changed: false };
+  }
+
+  const current = lastDateKey === yesterdayKey ? currentStreak + 1 : 1;
+  const longest = Math.max(longestStreak, current);
+  return { current, longest, changed: true };
+}
+
+// taskService.js の updateStreakOnCompletion と同じロジック（Admin SDK版）。
+async function updateStreakOnCompletion(uid, now) {
+  const todayKey = toDateKeyJst(now);
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = toDateKeyJst(yesterday);
+
+  const userRef = db.collection("users").doc(uid);
+  await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(userRef);
+    const data = snap.exists ? snap.data() : {};
+    const result = computeNextStreak({
+      lastDateKey: data.streakLastDate || null,
+      todayKey,
+      yesterdayKey,
+      currentStreak: Number(data.streakCurrent) || 0,
+      longestStreak: Number(data.streakLongest) || 0
+    });
+
+    if (result.changed) {
+      transaction.set(
+        userRef,
+        { streakCurrent: result.current, streakLongest: result.longest, streakLastDate: todayKey },
+        { merge: true }
+      );
+    }
+  });
+}
+
+// taskService.js の computeNextDueDate と同じ仕様（文字列→文字列の変換のみで「今」を参照しないため、
+// 実行環境のタイムゾーンに依存せず安全に流用できる）。
+function computeNextDueDate(dueDateStr, repeat) {
+  const base = dueDateStr ? new Date(`${dueDateStr}T00:00:00`) : new Date();
+  if (repeat === "daily") base.setDate(base.getDate() + 1);
+  else if (repeat === "weekly") base.setDate(base.getDate() + 7);
+  else if (repeat === "monthly") base.setMonth(base.getMonth() + 1);
+  else if (repeat === "yearly") base.setFullYear(base.getFullYear() + 1);
+
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, "0");
+  const d = String(base.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// taskService.js の cancelPendingReminders と同じ仕様：そのタスクの未通知リマインダー
+// （batch・fixed両方、taskIdで一致する分すべて）を取り消す。
+async function cancelAllPendingRemindersForTask(uid, taskId) {
+  const snap = await db
+    .collection("reminders")
+    .where("uid", "==", uid)
+    .where("taskId", "==", taskId)
+    .where("notified", "==", false)
+    .get();
+  await Promise.all(snap.docs.map((d) => d.ref.delete()));
+}
+
+// 通知の「完了」ボタン用：taskService.js の completeTask と同じ処理（ストリーク更新も含む）。
+exports.quickCompleteTask = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です");
+
+  const uid = request.auth.uid;
+  const taskId = request.data && request.data.taskId;
+  if (!taskId) throw new HttpsError("invalid-argument", "taskIdが必要です");
+
+  const taskRef = db.collection("users").doc(uid).collection("tasks").doc(taskId);
+  const taskSnap = await taskRef.get();
+  if (!taskSnap.exists) {
+    return { ok: false, reason: "already-gone" };
+  }
+
+  const task = taskSnap.data();
+  if (task.status === "完了") {
+    return { ok: false, reason: "already-completed" };
+  }
+
+  const completedId = `${taskId}_${Date.now()}`;
+  const completedAt = new Date();
+  await db
+    .collection("users")
+    .doc(uid)
+    .collection("completedTasks")
+    .doc(completedId)
+    .set({
+      ...task,
+      originalTaskId: taskId,
+      deletedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+  const isRepeating = !!task.repeat && task.repeat !== "none";
+  if (isRepeating) {
+    await taskRef.update({
+      status: "未完了",
+      dueDate: computeNextDueDate(task.dueDate, task.repeat),
+      laterCount: 0,
+      lastPostponedAt: null,
+      laterTime: null,
+      lastCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } else {
+    await taskRef.delete();
+  }
+
+  await cancelAllPendingRemindersForTask(uid, taskId);
+  await updateStreakOnCompletion(uid, completedAt);
+
+  return { ok: true };
+});
+
+// 通知の「1時間後」ボタン用：taskService.js の delayTaskWithLaterTime と同じ処理
+// （通知からのクイック操作なので、時間帯の選択肢は出さず固定で1時間後扱いにする）。
+exports.quickPostponeTask = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です");
+
+  const uid = request.auth.uid;
+  const taskId = request.data && request.data.taskId;
+  if (!taskId) throw new HttpsError("invalid-argument", "taskIdが必要です");
+
+  const taskRef = db.collection("users").doc(uid).collection("tasks").doc(taskId);
+  const taskSnap = await taskRef.get();
+  if (!taskSnap.exists) {
+    return { ok: false, reason: "already-gone" };
+  }
+
+  await taskRef.update({
+    status: "後でやる",
+    laterTime: "通知から1時間後",
+    laterCount: admin.firestore.FieldValue.increment(1),
+    lastPostponedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return { ok: true };
+});

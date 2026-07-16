@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useTasks, useRecentCompletedTasks, useLabelNames, useDiscoveredStatuses } from "../hooks/useTasks.js";
+import { useTasks, useRecentCompletedTasks, useLabelNames, useDiscoveredStatuses, useStreak } from "../hooks/useTasks.js";
 import { useNow } from "../hooks/useNow.js";
 import { computeCompletionStats } from "../utils/statsUtils.js";
 import {
@@ -123,6 +123,7 @@ function HomePage() {
     newlyDiscovered,
     clearNewlyDiscovered,
   } = useDiscoveredStatuses();
+  const { streak, applyStreak } = useStreak();
   // タスク完了直後は再取得を待たず、その場ですぐ集計へ反映するための楽観的な追加分。
   const [optimisticCompletions, setOptimisticCompletions] = useState([]);
   const recentCompleted = useMemo(
@@ -167,10 +168,13 @@ function HomePage() {
 
   async function handleComplete(task) {
     try {
-      const completedEntry = await completeTask(task);
+      const { completedEntry, streak } = await completeTask(task);
       celebrateCompletion();
       if (completedEntry) {
         setOptimisticCompletions((prev) => [completedEntry, ...prev]);
+      }
+      if (streak) {
+        applyStreak(streak);
       }
     } catch (err) {
       console.error("タスクの完了に失敗しました:", err);
@@ -198,6 +202,22 @@ function HomePage() {
 
   return (
     <section id="home-screen" className="home-screen">
+      <div className="streak-banner" aria-live="polite">
+        {streak.current > 0 ? (
+          <>
+            <span className="streak-banner-flame" aria-hidden="true">
+              🔥
+            </span>
+            <span className="streak-banner-text">
+              <strong>{streak.current}日連続</strong>で達成中
+            </span>
+            {streak.longest > streak.current && <span className="streak-banner-best">最長{streak.longest}日</span>}
+          </>
+        ) : (
+          <span className="streak-banner-text">今日タスクを1つ完了して、連続達成を始めよう</span>
+        )}
+      </div>
+
       <section className="home-section" id="current-status-section">
         <h2 className="home-section-title">あなたの現在のステータス</h2>
         <div className="current-status-list" aria-live="polite">

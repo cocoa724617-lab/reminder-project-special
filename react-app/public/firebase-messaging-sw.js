@@ -1,6 +1,18 @@
 importScripts("https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging-compat.js");
 
+// 通知のクイックアクション（「完了」「1時間後」ボタンをアプリを開かずに処理する）用。
+// 読み込みに失敗しても、通知の受信・表示や下部の静的アセットキャッシュなど他の機能を
+// 巻き込んで壊さないよう、ここだけtry/catchする。
+let quickActionSdkAvailable = true;
+try {
+  importScripts("https://www.gstatic.com/firebasejs/11.10.0/firebase-auth-compat.js");
+  importScripts("https://www.gstatic.com/firebasejs/11.10.0/firebase-functions-compat.js");
+} catch (error) {
+  quickActionSdkAvailable = false;
+  console.error("クイックアクション用SDKの読み込みに失敗しました:", error);
+}
+
 // 既存 firebase-init.js / react-app/src/services/firebase.js と同じ設定値。
 firebase.initializeApp({
   apiKey: "AIzaSyCHf5uiktc7MJIQ2oWopYoMTYyfS7CwkIw",
@@ -15,21 +27,106 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // 通知の受信処理・表示内容は既存 firebase-messaging-sw.js から変更していない。
+// taskIdが含まれる通知（タスクに紐付くリマインダー）だけ、「完了」「1時間後」のクイックアクション
+// ボタンを付ける（うっかり防止リマインダー(kind: "daily")のようにタスクに紐付かない通知には出さない）。
 messaging.onBackgroundMessage((payload) => {
   console.log("バックグラウンドメッセージ受信:", payload);
 
   const notificationTitle = payload.data?.title || "リマインダー";
+  const taskId = payload.data?.taskId || null;
+
   const notificationOptions = {
     body: payload.data?.body || "通知があります",
+    data: { taskId },
   };
+
+  if (taskId && quickActionSdkAvailable) {
+    notificationOptions.actions = [
+      { action: "complete", title: "✅ 完了" },
+      { action: "postpone_1h", title: "🕒 1時間後" },
+    ];
+  }
 
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
+// Service Workerは初回起動のたびFirebase Authの永続化セッション(IndexedDB)を読み直す必要があるため、
+// onAuthStateChangedが一度発火してcurrentUserが確定するまで待つ。タイムアウトはFCMの
+// バックグラウンド処理が長時間ブロックされないよう控えめに設定している。
+function waitForAuthUser(timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      reject(new Error("認証状態の取得がタイムアウトしました"));
+    }, timeoutMs);
+
+    const unsubscribe = firebase.auth().onAuthStateChanged(
+      (user) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        unsubscribe();
+        if (user) resolve(user);
+        else reject(new Error("サインインしていません"));
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        unsubscribe();
+        reject(error);
+      },
+    );
+  });
+}
+
+// 操作に失敗したときだけ、原因が分かる通知を新たに出す
+// （成功時は通知を消すだけにして、アプリを開かず完結する体験を優先する）。
+function showQuickActionFailureNotification(action) {
+  const label = action === "complete" ? "完了" : "1時間後に通知";
+  return self.registration.showNotification("操作に失敗しました", {
+    body: `「${label}」を反映できませんでした。アプリを開いて操作してください。`,
+  });
+}
+
+// 通知のアクションボタン用：Cloud FunctionsのquickCompleteTask/quickPostponeTaskを、
+// アプリを開かずService Worker内から直接呼ぶ。
+async function handleQuickAction(action, taskId) {
+  if (!taskId) return;
+  if (!quickActionSdkAvailable) {
+    await showQuickActionFailureNotification(action);
+    return;
+  }
+
+  try {
+    await waitForAuthUser();
+    const functionName = action === "complete" ? "quickCompleteTask" : "quickPostponeTask";
+    const response = await firebase.functions().httpsCallable(functionName)({ taskId });
+    if (!response || !response.data || response.data.ok !== true) {
+      await showQuickActionFailureNotification(action);
+    }
+  } catch (error) {
+    console.error("クイックアクションの実行に失敗しました:", error);
+    await showQuickActionFailureNotification(action);
+  }
+}
+
 // 通知クリック時の遷移先のみ、旧HTML(task-list.html)からReact Routerのパス(/tasks)へ変更している。
 // フォーカス済みウィンドウを探して遷移させる／無ければ新規ウィンドウを開く挙動自体は既存のまま。
+// アクションボタン（「完了」「1時間後」）がタップされた場合だけ、アプリを開かずhandleQuickActionで完結する。
 self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
+  const { action, notification } = event;
+  const taskId = notification.data && notification.data.taskId;
+
+  notification.close();
+
+  if (action === "complete" || action === "postpone_1h") {
+    event.waitUntil(handleQuickAction(action, taskId));
+    return;
+  }
 
   const targetUrl = new URL("/tasks", self.location.origin).href;
 

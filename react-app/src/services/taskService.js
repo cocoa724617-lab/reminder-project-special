@@ -11,8 +11,10 @@ import {
   serverTimestamp,
   increment,
   Timestamp,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "./firebase.js";
+import { toDateKey } from "../utils/dateUtils.js";
 
 function tasksCollection(uid) {
   return collection(db, "users", uid, "tasks");
@@ -97,14 +99,61 @@ function computeNextDueDate(dueDateStr, repeat) {
   return `${y}-${m}-${d}`;
 }
 
+// 連続達成日数（ストリーク）の次の値を計算する純粋関数。Firestoreを触らないため単体テストしやすいよう
+// updateStreakOnCompletion（トランザクションの配線部分）から切り出している。
+// 「日数」のストリークであって完了回数のストリークではないため、同じ日に何度完了しても加算しない。
+// 前回カウントした日が「昨日」なら+1、「今日」ならそのまま、それ以外（間が空いた）なら1にリセットする。
+// Cloud Functions側のquickCompleteTask（通知のクイック操作用）にも同じロジックのサーバー版があるため、
+// 変更する場合は両方を揃えること。
+export function computeNextStreak({ lastDateKey, todayKey, yesterdayKey, currentStreak, longestStreak }) {
+  if (lastDateKey === todayKey) {
+    return { current: currentStreak, longest: longestStreak, changed: false };
+  }
+
+  const current = lastDateKey === yesterdayKey ? currentStreak + 1 : 1;
+  const longest = Math.max(longestStreak, current);
+  return { current, longest, changed: true };
+}
+
+// 連続達成日数（ストリーク）の更新。タスク完了のたびに呼ぶ。
+// 複数タスクをほぼ同時に完了しても二重加算されないよう、読み取り→判定→書き込みをトランザクションにする。
+async function updateStreakOnCompletion(uid, now) {
+  const todayKey = toDateKey(now);
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = toDateKey(yesterday);
+
+  const userRef = doc(db, "users", uid);
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
+    const data = snap.exists() ? snap.data() : {};
+    const result = computeNextStreak({
+      lastDateKey: data.streakLastDate || null,
+      todayKey,
+      yesterdayKey,
+      currentStreak: Number(data.streakCurrent) || 0,
+      longestStreak: Number(data.streakLongest) || 0,
+    });
+
+    if (result.changed) {
+      transaction.set(
+        userRef,
+        { streakCurrent: result.current, streakLongest: result.longest, streakLastDate: todayKey },
+        { merge: true },
+      );
+    }
+    return { current: result.current, longest: result.longest };
+  });
+}
+
 // 既存 tasks-data.js の completeTask がベース：
 // completedTasks へ履歴を書き込み、繰り返しタスクなら次回期限へリセット、そうでなければ tasks から削除し、
 // 保留中のリマインダーも合わせてキャンセルする。
 // 移植元にはなかった拡張：繰り返しタスクには lastCompletedAt も書き込む。
 // 「今回分は完了済み・次のdueDateが来るまでは未完了扱いにしない」判定（taskLabels.js の getRepeatCycleStatus）
 // が、この lastCompletedAt と dueDate だけで完結できるようにするため。
-// 戻り値も { completedEntry, updatedTask } に変更し、呼び出し側（useTasks.js）がローカルの
-// tasks 一覧を「削除」ではなく「更新後の内容で差し替え」できるようにしている
+// 戻り値も { completedEntry, updatedTask, streak } に変更し、呼び出し側（useTasks.js）がローカルの
+// tasks 一覧を「削除」ではなく「更新後の内容で差し替え」できるようにし、ストリーク表示も即時反映できるようにしている
 // （繰り返しタスクは Firestore 上では消えていないため、ローカル一覧からも消してはいけない）。
 export async function completeTask(uid, task) {
   const completedId = `${task.id}_${Date.now()}`;
@@ -133,9 +182,10 @@ export async function completeTask(uid, task) {
   }
 
   await cancelPendingReminders(uid, task.id);
+  const streak = await updateStreakOnCompletion(uid, completedAt);
 
   const completedEntry = { ...task, id: completedId, originalTaskId: task.id, deletedAt: completedAt };
-  return { completedEntry, updatedTask };
+  return { completedEntry, updatedTask, streak };
 }
 
 // 既存 tasks-data.js の setTaskStatus と同じ仕様：statusフィールドだけを更新する
