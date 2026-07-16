@@ -4,7 +4,6 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  addDoc,
   deleteDoc,
   updateDoc,
   query,
@@ -39,38 +38,6 @@ export async function saveTask(uid, task) {
   return id;
 }
 
-// 既存 tasks-data.js の clearFixedReminders と同じ仕様：
-// 「この日時に必ず通知する」設定はタスク保存のたびに作り直すため、まず既存分を消す。
-export async function clearFixedReminders(uid, taskId) {
-  const remindersQuery = query(
-    collection(db, "reminders"),
-    where("uid", "==", uid),
-    where("taskId", "==", taskId),
-    where("kind", "==", "fixed"),
-  );
-  const snapshot = await getDocs(remindersQuery);
-  await Promise.all(snapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)));
-}
-
-// 既存 tasks-data.js の saveFixedReminders と同じ仕様。
-export async function saveFixedReminders(uid, taskId, title, fcmToken, reminders) {
-  await clearFixedReminders(uid, taskId);
-  await Promise.all(
-    reminders.map((reminder) =>
-      addDoc(collection(db, "reminders"), {
-        uid,
-        taskId,
-        title,
-        body: "指定した日時のお知らせです",
-        remindAt: Timestamp.fromDate(new Date(`${reminder.date}T${reminder.time}:00+09:00`)),
-        fcmToken,
-        kind: "fixed",
-        notified: false,
-        createdAt: serverTimestamp(),
-      }),
-    ),
-  );
-}
 
 // 既存 tasks-data.js の loadTasks と同じ仕様：ユーザーの未完了タスク一覧（tasksサブコレクション全件）を取得する。
 export async function fetchTasks(uid) {
@@ -196,12 +163,17 @@ export async function deleteTask(uid, taskId) {
   await cancelPendingReminders(uid, taskId);
 }
 
-// 完了済みタスクの削除。
-// 実装上の仮定：既存アプリの completed-tasks.html にはこの操作自体が存在しないため、
-// 一番素直な実装（ドキュメントを削除するだけ）とした。completeTask の時点で該当タスクの
-// 保留中リマインダーは既にキャンセル済みのため、ここでの追加のリマインダー処理は行わない。
+// 完了済みタスクの「削除」。
+// ドキュメント自体は消さず removedFromHistory フラグを立てるだけにする（論理削除）。
+// このドキュメントは達成率・ステータス判定の集計（userStatusUtils.js）で今日/直近7日間の
+// 完了数としてそのまま数えられているため、物理削除すると一覧から消したいだけのはずが
+// 過去の達成実績まで減ってしまう。一覧表示側（CompletedTasksPage/TaskListPage）だけが
+// このフラグを見て除外し、集計側は無視して全件を対象にする。
 export async function deleteCompletedTask(uid, completedTaskId) {
-  await deleteDoc(doc(db, "users", uid, "completedTasks", completedTaskId));
+  await updateDoc(doc(db, "users", uid, "completedTasks", completedTaskId), {
+    removedFromHistory: true,
+    removedFromHistoryAt: serverTimestamp(),
+  });
 }
 
 // 既存 user-data.js の loadUserData と同じ場所（users/{uid}）から labelNames だけを取り出す。

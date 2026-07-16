@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../contexts/useAuth.js";
 import {
   fetchRecentCompletedTasks,
@@ -10,6 +10,8 @@ import {
   deleteCompletedTask as deleteCompletedTaskInFirestore,
   fetchUserLabelNames,
 } from "../services/taskService.js";
+import { fetchDiscoveredStatuses, saveDiscoveredStatuses } from "../services/userService.js";
+import { discoverStatusKeys } from "../utils/userStatusUtils.js";
 
 // ログイン中ユーザーの直近 days 日分の完了済みタスクを取得するフック。
 // uid は AuthContext から取る。ProtectedRoute の内側で使う前提のため
@@ -207,6 +209,83 @@ export function useLabelNames() {
   }, [currentUser]);
 
   return labelNames;
+}
+
+// ステータス発見度用：これまでに発見済みのステータスキー一覧を users/{uid}.discoveredStatuses から取得し、
+// 新たに該当したステータスをマージして永続化する。currentStatuses（今まさに該当しているものだけ）とは違い、
+// 過去に該当して今は該当しなくなったステータスも発見数から消えないようにするための蓄積。
+export function useDiscoveredStatuses() {
+  const { currentUser } = useAuth();
+  const [discoveredKeys, setDiscoveredKeys] = useState([]);
+  // Firestoreからの初回読み込みが終わったuidを記録する。currentUserのuidと一致するまでは
+  // discoveredKeysがまだ空のプレースホルダーの可能性があるため、一致前に recordDiscoveries を呼ぶと
+  // 「既に発見済みのステータス」まで新規発見と誤判定してしまう（保存時に過去の発見分も上書き消去してしまう）。
+  const [loadedForUid, setLoadedForUid] = useState(undefined);
+  // 今回のマージで新たに発見されたステータス（演出表示用）。表示側で消費したら clearNewlyDiscovered で空にする。
+  const [newlyDiscovered, setNewlyDiscovered] = useState([]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function load() {
+      if (!currentUser) {
+        if (!isCancelled) {
+          setDiscoveredKeys([]);
+          setLoadedForUid(null);
+        }
+        return;
+      }
+
+      try {
+        const keys = await fetchDiscoveredStatuses(currentUser.uid);
+        if (!isCancelled) setDiscoveredKeys(keys);
+      } catch (err) {
+        console.error("発見済みステータスの取得に失敗しました:", err);
+      } finally {
+        if (!isCancelled) setLoadedForUid(currentUser.uid);
+      }
+    }
+
+    load();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser]);
+
+  const isLoaded = loadedForUid === (currentUser ? currentUser.uid : null);
+
+  // 現在該当しているステータス群を発見済み一覧にマージする（discoverStatusKeys がSetで重複を排除するため、
+  // 同じステータスを何度呼んでも二重にカウントされない）。新規発見が無ければ書き込みは行わない。
+  // useCallback で参照を固定し、呼び出し側（HomePage の useEffect）の依存配列に安全に含められるようにする。
+  const recordDiscoveries = useCallback(
+    (currentStatuses) => {
+      setDiscoveredKeys((prevKeys) => {
+        const merged = discoverStatusKeys(prevKeys, currentStatuses);
+        if (merged.length === prevKeys.length) return prevKeys;
+
+        const prevKeySet = new Set(prevKeys);
+        const newlyAdded = (Array.isArray(currentStatuses) ? currentStatuses : []).filter(
+          (status) => status && status.key && !prevKeySet.has(status.key),
+        );
+        if (newlyAdded.length > 0) {
+          setNewlyDiscovered((prev) => [...prev, ...newlyAdded]);
+        }
+
+        if (currentUser) {
+          saveDiscoveredStatuses(currentUser.uid, merged).catch((err) => {
+            console.error("発見済みステータスの保存に失敗しました:", err);
+          });
+        }
+        return merged;
+      });
+    },
+    [currentUser],
+  );
+
+  const clearNewlyDiscovered = useCallback(() => setNewlyDiscovered([]), []);
+
+  return { discoveredKeys, isLoaded, recordDiscoveries, newlyDiscovered, clearNewlyDiscovered };
 }
 
 // タスク登録・編集フォーム用：taskId が指定されている間だけ既存タスクを1件取得する

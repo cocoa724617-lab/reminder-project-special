@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useTasks, useRecentCompletedTasks, useLabelNames } from "../hooks/useTasks.js";
+import { useTasks, useRecentCompletedTasks, useLabelNames, useDiscoveredStatuses } from "../hooks/useTasks.js";
+import { useNow } from "../hooks/useNow.js";
 import { computeCompletionStats } from "../utils/statsUtils.js";
-import { computeUserStatusStats, getUserStatusesFromStats, computeWeeklyProgress } from "../utils/userStatusUtils.js";
+import {
+  computeUserStatusStats,
+  getUserStatusesFromStats,
+  computeWeeklyProgress,
+  getStatusDiscoveryStats,
+} from "../utils/userStatusUtils.js";
 import { normalizeImportance, getRepeatCycleStatus } from "../utils/taskLabels.js";
-import { celebrateCompletion } from "../utils/celebrate.js";
+import { celebrateCompletion, celebrateStatusDiscovery } from "../utils/celebrate.js";
 import MetaPillRow from "../components/MetaPillRow.jsx";
 
 // 既存 index.html の getReminderLabel と同じ実装。
@@ -107,9 +113,41 @@ function HomePage() {
   const { tasks, isLoading: tasksLoading, error: tasksError, completeTask } = useTasks();
   const { completedTasks: recentCompletedFromServer, isLoading: completedLoading } = useRecentCompletedTasks();
   const labelNames = useLabelNames();
+  // 繰り返しタスクの「次回期限が来たか」判定用。ページを開きっぱなしでも定期的に更新され、
+  // 次回期限を過ぎた繰り返しタスクが自動で「今日やるべきタスク」に出てくるようにする。
+  const now = useNow();
+  const {
+    discoveredKeys,
+    isLoaded: discoveredStatusesLoaded,
+    recordDiscoveries,
+    newlyDiscovered,
+    clearNewlyDiscovered,
+  } = useDiscoveredStatuses();
   // タスク完了直後は再取得を待たず、その場ですぐ集計へ反映するための楽観的な追加分。
   const [optimisticCompletions, setOptimisticCompletions] = useState([]);
-  const recentCompleted = [...optimisticCompletions, ...recentCompletedFromServer];
+  const recentCompleted = useMemo(
+    () => [...optimisticCompletions, ...recentCompletedFromServer],
+    [optimisticCompletions, recentCompletedFromServer],
+  );
+
+  // ステータス発見度の蓄積：読み込み完了後、今まさに該当しているステータスを発見済み一覧へマージする。
+  // データ未取得のまま集計すると「タスクなし」判定でバカンス中を誤発見してしまうため、読み込み中は行わない。
+  // discoveredStatusesLoaded を待たずに呼ぶと、Firestoreから過去の発見履歴を取得しきる前の空配列を
+  // 「発見済み一覧」として上書き保存してしまい、既発見のステータスも毎回「新規発見」扱いになってしまう。
+  useEffect(() => {
+    if (tasksLoading || completedLoading || !discoveredStatusesLoaded) return;
+    const stats = computeUserStatusStats(tasks, recentCompleted);
+    const statuses = getUserStatusesFromStats(stats);
+    if (statuses.length > 0) recordDiscoveries(statuses);
+  }, [tasksLoading, completedLoading, discoveredStatusesLoaded, tasks, recentCompleted, recordDiscoveries]);
+
+  // 新規発見があった瞬間だけトースト演出を出す。表示後は自身でキューを空にして、
+  // 次に別のステータスを新規発見するまで再表示されないようにする。
+  useEffect(() => {
+    if (newlyDiscovered.length === 0) return;
+    newlyDiscovered.forEach((status) => celebrateStatusDiscovery(status));
+    clearNewlyDiscovered();
+  }, [newlyDiscovered, clearNewlyDiscovered]);
 
   if (tasksLoading || completedLoading) {
     return (
@@ -142,7 +180,7 @@ function HomePage() {
 
   // 繰り返しタスクは今回分を完了済み（次のdueDateが来ていない）なら、ホーム画面には出さない。
   // 統計（下のcomputeXxxStats系）はこのフィルタの影響を受けない：tasksをそのまま渡す。
-  const visibleTasks = tasks.filter((task) => !getRepeatCycleStatus(task));
+  const visibleTasks = tasks.filter((task) => !getRepeatCycleStatus(task, now));
   const activeTasks = visibleTasks.filter(isActiveTask);
   const nextTask = pickNextTask(activeTasks);
   const todaysActive = activeTasks.filter(isTodayTask).filter((task) => !nextTask || task.id !== nextTask.id);
@@ -156,6 +194,7 @@ function HomePage() {
   const completionRateText =
     weeklyProgress.completionTargetCount > 0 ? formatPercentText(weeklyProgress.completionRate) : "集計対象なし";
   const postponeRateText = formatPercentText(weeklyProgress.postponeRate, "0%");
+  const discoveryStats = getStatusDiscoveryStats(discoveredKeys);
 
   return (
     <section id="home-screen" className="home-screen">
@@ -215,12 +254,11 @@ function HomePage() {
           ) : (
             todaysActive.map((task) => (
               <div className="task-card task-card-compact" key={task.id}>
-                <input
-                  type="checkbox"
-                  className="task-checkbox"
-                  aria-label="完了にする"
-                  checked={false}
-                  onChange={() => handleComplete(task)}
+                <button
+                  type="button"
+                  className="task-complete-circle"
+                  aria-label="タスクを完了にする"
+                  onClick={() => handleComplete(task)}
                 />
                 <div className="task-info">
                   <h3>{getTaskTitle(task, "無題のタスク")}</h3>
@@ -293,8 +331,56 @@ function HomePage() {
         </Link>
       </section>
 
-      <Link to="/tasks/new" className="fab-button" aria-label="タスクを追加">
-        +
+      <section className="home-section" id="status-discovery-section">
+        <h2 className="home-section-title">ステータス発見度</h2>
+        <div className="status-discovery-card">
+          <p className="status-discovery-count">
+            <span className="status-discovery-value">{discoveryStats.discoveredCount}</span>
+            <span className="status-discovery-total"> / {discoveryStats.totalCount} 種類発見</span>
+          </p>
+          <div
+            className="status-discovery-bar"
+            role="progressbar"
+            aria-valuenow={discoveryStats.discoveredCount}
+            aria-valuemin={0}
+            aria-valuemax={discoveryStats.totalCount}
+          >
+            <div
+              className="status-discovery-bar-fill"
+              style={{ width: `${Math.round((discoveryStats.discoveredCount / discoveryStats.totalCount) * 100)}%` }}
+            />
+          </div>
+          <ul className="status-discovery-grid">
+            {discoveryStats.statuses.map((status) => (
+              <li
+                key={status.key}
+                className={`status-discovery-item ${status.discovered ? "is-discovered" : "is-locked"}`}
+              >
+                {status.discovered ? (
+                  <img
+                    className="status-discovery-image"
+                    src={status.image}
+                    alt={status.name}
+                    loading="lazy"
+                    onError={(event) => event.target.remove()}
+                  />
+                ) : (
+                  <span className="status-discovery-placeholder" aria-hidden="true">
+                    ？
+                  </span>
+                )}
+                <span className="status-discovery-name">{status.discovered ? status.name : "未発見"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <Link to="/tasks/new" className="fab-button">
+        <span className="fab-button-icon" aria-hidden="true">
+          +
+        </span>
+        タスクを追加
       </Link>
     </section>
   );

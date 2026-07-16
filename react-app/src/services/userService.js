@@ -21,3 +21,13 @@ export async function saveNotificationSettings(uid, settings) {
 export async function saveLabelNames(uid, labelNames) {
   await setDoc(doc(db, "users", uid), { labelNames }, { merge: true });
 }
+
+// ステータス発見度用：これまでに一度でも該当したステータスのキー一覧（discoverStatusKeysで重複排除済み）。
+export async function fetchDiscoveredStatuses(uid) {
+  const snap = await getDoc(doc(db, "users", uid));
+  return snap.exists() ? snap.data().discoveredStatuses || [] : [];
+}
+
+export async function saveDiscoveredStatuses(uid, discoveredStatusKeys) {
+  await setDoc(doc(db, "users", uid), { discoveredStatuses: discoveredStatusKeys }, { merge: true });
+}

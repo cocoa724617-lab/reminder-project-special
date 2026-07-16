@@ -6,14 +6,21 @@ function MessageTypeSelector({ value, onChange }) {
     <>
       <h2>「後でやる」を押したときのメッセージ</h2>
       <p>気分に合わせて、後回しにしたときの言葉のトーンを選べます。</p>
-      {Object.entries(POSTPONE_MESSAGE_TYPES).map(([key, meta]) => (
-        <div key={key}>
-          <label>
-            <input type="radio" name="message-type" value={key} checked={value === key} onChange={() => onChange(key)} />
+      <div className="choice-chip-row">
+        {Object.entries(POSTPONE_MESSAGE_TYPES).map(([key, meta]) => (
+          <label key={key} className={`choice-chip${value === key ? " is-selected" : ""}`}>
+            <input
+              type="radio"
+              name="message-type"
+              value={key}
+              checked={value === key}
+              onChange={() => onChange(key)}
+              className="choice-chip-input"
+            />
             {meta.label}
           </label>
-        </div>
-      ))}
+        ))}
+      </div>
     </>
   );
 }

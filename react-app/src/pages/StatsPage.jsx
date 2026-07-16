@@ -40,7 +40,10 @@ function StatsPage() {
     stats.bestWeekdays.length > 0 ? stats.bestWeekdays.map((day) => `${day}曜日`).join("・") : "まだデータがありません";
 
   // 直近30日（約1か月）分の達成率・完了数・完了タスク名一覧。
+  // 達成率・完了数はremovedFromHistory（完了済み一覧からの削除）の影響を受けないが、
+  // 名前一覧はここで除外し、一覧から消す操作をこの画面でも反映する。
   const monthlyStats = computeMonthlyProgress(tasks, completedTasks, new Date(), MONTHLY_RANGE_DAYS);
+  const visibleMonthlyCompletedTasks = monthlyStats.completedTasks.filter((task) => !task.removedFromHistory);
   const monthlyCompletionRateText =
     monthlyStats.completionTargetCount > 0 ? formatPercentText(monthlyStats.completionRate) : "集計対象なし";
 
@@ -79,11 +82,11 @@ function StatsPage() {
           </div>
         </div>
 
-        {monthlyStats.completedTasks.length === 0 ? (
+        {visibleMonthlyCompletedTasks.length === 0 ? (
           <p className="task-list-empty">まだ完了したタスクがありません。</p>
         ) : (
           <ul className="stat-history-list">
-            {monthlyStats.completedTasks.map((task) => (
+            {visibleMonthlyCompletedTasks.map((task) => (
               <li className="stat-history-item" key={task.id}>
                 <span className="stat-history-name">{task.name}</span>
                 <span className="stat-history-date">

@@ -16,6 +16,45 @@ const FREQUENCY_AVERAGE_PER_DAY = {
 // 通知同士を最低これだけ離す
 const MIN_GAP_MINUTES = 60;
 
+// 「うっかり防止リマインダー」：1日1回、この中からランダムに1つ選んで送る。
+// 特定のタスクに紐付かないため、reminders コレクションでは kind: "daily" として扱う。
+const DAILY_REMINDER_MESSAGES = [
+  "LINEの返信はした？",
+  "上司への返信、もう送った？",
+  "あの予定、忘れてない？",
+  "メールの返信、後回しにしてない？",
+  "今日が締め切りの課題、大丈夫？",
+  "明日の持ち物、準備した？",
+  "提出するファイル、間違ってない？",
+  "予約の時間、確認した？",
+  "友達との約束、何時からだっけ？",
+  "今日中に連絡するって言ってなかった？",
+  "買い忘れているものはない？",
+  "洗濯物、干したままじゃない？",
+  "ゴミを出すの、忘れてない？",
+  "スマホの充電、大丈夫？",
+  "財布と鍵、ちゃんと持った？",
+  "薬を飲む時間じゃない？",
+  "水分、ちゃんと取ってる？",
+  "そろそろ休憩したほうがよくない？",
+  "今日の予定、もう一度確認した？",
+  "会議の資料、準備できてる？",
+  "あの人へのお礼、伝えた？",
+  "折り返しの電話、まだしてなくない？",
+  "シフトの提出、今日までじゃない？",
+  "支払い期限、過ぎてない？",
+  "レポート、保存しただけで満足してない？",
+  "先生への連絡、送った？",
+  "返信しようと思って、そのまま忘れてない？",
+  "明日の予定、カレンダーに入れた？",
+  "やろうとしていたこと、何か忘れてない？",
+  "「後でやる」って言ってから、どれくらいたった？"
+];
+
+function pickRandomDailyReminderMessage() {
+  return DAILY_REMINDER_MESSAGES[Math.floor(Math.random() * DAILY_REMINDER_MESSAGES.length)];
+}
+
 function normalizeFrequencyCount(value) {
   const count = Number(value);
   if (!Number.isFinite(count) || count <= 0) return null;
@@ -66,6 +105,38 @@ function isExcluded(minutes, excludeTimes) {
 
 function isMinuteAllowed(minuteOfDay, startMinutes, endMinutes, excludeTimes) {
   return isInRange(minuteOfDay, startMinutes, endMinutes) && !isExcluded(minuteOfDay, excludeTimes);
+}
+
+// 「必ず通知する時間」(期限からの相対オフセット)が除外時間帯(「通知を辞めてほしい時間」)に
+// かぶっていたら、その除外時間帯が終わる時刻までずらす。①の「ランダムに実行していい時間帯」は
+// ランダム通知(computeBatchSchedule)専用のスコープなので、ここでは意図的に見ない。
+// 除外時間帯が連続/重複していても、もう除外時間でなくなるまで繰り返しずらす(念のため上限20回)。
+function shiftPastExcludeTimes(date, excludeTimes) {
+  if (!Array.isArray(excludeTimes) || excludeTimes.length === 0) return date;
+
+  let current = date;
+  for (let i = 0; i < 20; i++) {
+    const { y, m, d } = getJstDateParts(current);
+    const dayStart = jstCalendarMinuteToUtcDate(y, m, d, 0);
+    const minuteOfDay = Math.round((current.getTime() - dayStart.getTime()) / 60000);
+
+    const hit = excludeTimes.find((range) => {
+      if (!range.start || !range.end) return false;
+      return isInRange(minuteOfDay, timeStringToMinutes(range.start), timeStringToMinutes(range.end));
+    });
+    if (!hit) return current;
+
+    const startMinutes = timeStringToMinutes(hit.start);
+    const endMinutes = timeStringToMinutes(hit.end);
+    // 日またぎ(start > end)の除外時間帯で、かつ今いるのが夜側(start以降)の場合だけ、
+    // 終了時刻は「翌日」の分になる(朝側=end未満にいる場合は終了時刻はその日のうち)。
+    const dayOffset = startMinutes > endMinutes && minuteOfDay >= startMinutes ? 1 : 0;
+    const endDayUtcMs = Date.UTC(y, m - 1, d) + dayOffset * 86400000;
+    const endDayDate = new Date(endDayUtcMs);
+    const { y: ey, m: em, d: ed } = getJstDateParts(endDayDate);
+    current = jstCalendarMinuteToUtcDate(ey, em, ed, endMinutes);
+  }
+  return current;
 }
 
 // JSTは常にUTC+9(サマータイムなし)なので、暦日+分オフセットから直接UTCのDateを作れる
@@ -173,6 +244,87 @@ function isChainableTask(task) {
   return !!task && task.status !== "完了" && (hasCountFrequency || hasLegacyFrequency) && task.enabled !== false;
 }
 
+// 「必ず通知する時間」(kind: "fixed")用：期限からの相対オフセット。
+const FIXED_REMINDER_UNIT_MS = {
+  minutes: 60 * 1000,
+  hours: 60 * 60 * 1000,
+  days: 24 * 60 * 60 * 1000,
+  weeks: 7 * 24 * 60 * 60 * 1000
+};
+
+function shouldScheduleFixedReminders(task) {
+  return (
+    !!task &&
+    task.status !== "完了" &&
+    task.enabled !== false &&
+    Array.isArray(task.fixedReminders) &&
+    task.fixedReminders.length > 0 &&
+    !!task.dueDate &&
+    !!task.dueTime
+  );
+}
+
+// JSTは常にUTC+9のため、日付文字列+時刻文字列からそのままUTC Dateを組み立てられる。
+function computeDueDateTime(task) {
+  const date = new Date(`${task.dueDate}T${task.dueTime}:00+09:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// 期限から各オフセット分だけ遡った通知時刻を計算する。計算結果が既に過去のものはスキップする
+// （期限まで3日しかないのに「1週間前」を選んだ場合など、保存直後に即時通知が飛ぶのを防ぐ）。
+// 除外時間帯(「通知を辞めてほしい時間」)にかぶる場合は、その除外時間帯が終わる時刻までずらす。
+function computeFixedReminderTimes(task, now, excludeTimes) {
+  const dueDateTime = computeDueDateTime(task);
+  if (!dueDateTime) return [];
+
+  return task.fixedReminders
+    .map((offset) => {
+      const unitMs = FIXED_REMINDER_UNIT_MS[offset && offset.unit];
+      const value = Number(offset && offset.value);
+      if (!unitMs || !Number.isFinite(value) || value <= 0) return null;
+      const remindAt = new Date(dueDateTime.getTime() - unitMs * value);
+      return shiftPastExcludeTimes(remindAt, excludeTimes);
+    })
+    .filter((remindAt) => remindAt && remindAt.getTime() > now.getTime());
+}
+
+// 「必ず通知する時間」の未通知予約をすべて作り直す（タスク編集のたび、繰り返しタスクの次回期限への
+// 更新のたびに呼ばれる。batch予約と同じく、書き込みのたびに全消し→計算し直しの単純な方式にすることで、
+// 繰り返しタスクが次の周回に進んでも自動的に新しい期限基準で再スケジュールされるようにする）。
+async function regenerateFixedReminders(uid, taskId, task, userData, now) {
+  const existing = await db
+    .collection("reminders")
+    .where("uid", "==", uid)
+    .where("taskId", "==", taskId)
+    .where("kind", "==", "fixed")
+    .where("notified", "==", false)
+    .get();
+  await Promise.all(existing.docs.map((d) => d.ref.delete()));
+
+  if (!userData || !userData.fcmToken) return;
+
+  const excludeTimes = (userData.notificationSettings && userData.notificationSettings.excludeTimes) || [];
+  const remindTimes = computeFixedReminderTimes(task, now, excludeTimes);
+  if (remindTimes.length === 0) return;
+
+  const title = task.title || task.name || "リマインダー";
+  await Promise.all(
+    remindTimes.map((remindAt) =>
+      db.collection("reminders").add({
+        uid,
+        taskId,
+        kind: "fixed",
+        title,
+        body: "指定した日時のお知らせです",
+        remindAt: admin.firestore.Timestamp.fromDate(remindAt),
+        fcmToken: userData.fcmToken,
+        notified: false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      })
+    )
+  );
+}
+
 // タスクと通知設定から、対象期間(日/週)にばら撒く通知時刻の一覧を計算する
 function computeBatchSchedule(task, settings, referenceDate, afterDate) {
   const startMinutes = timeStringToMinutes(settings.startTime || "09:00");
@@ -237,31 +389,100 @@ async function regenerateTaskBatch(uid, taskId, task, userData, now) {
   );
 }
 
-// タスクの作成・更新・削除のたびに、そのタスクのバッチ予約を作り直す
+// うっかり防止リマインダー用：通知設定(①の許可時間帯・②の除外時間帯)に従って、
+// 当日ぶん1件だけランダムな時刻を選ぶ。タスクのバッチ予約(computeBatchSchedule)と同じ
+// 時間帯ロジックを流用するが、頻度は常に1日1回固定でよいのでunitは"day"に固定する。
+function computeDailyReminderSchedule(settings, referenceDate) {
+  const startMinutes = timeStringToMinutes(settings.startTime || "09:00");
+  const endMinutes = timeStringToMinutes(settings.endTime || "21:00");
+  if (startMinutes === endMinutes) return { scheduleKey: null, time: null };
+
+  const scheduleKey = computeScheduleKey("day", referenceDate);
+  const candidates = buildScheduleCandidates("day", referenceDate, startMinutes, endMinutes, settings.excludeTimes, null);
+  if (candidates.length === 0) return { scheduleKey, time: null };
+
+  const time = candidates[Math.floor(Math.random() * candidates.length)];
+  return { scheduleKey, time };
+}
+
+// ユーザー単位のうっかり防止リマインダーの未通知予約を作り直す(毎日0:05の再生成時に呼ぶ)。
+// タスクに紐付かないため kind: "daily" とし、taskIdは持たない
+// (sendReminderNotifications側もkind: "daily"はタスクの存在チェックをスキップする)。
+async function regenerateDailyReminder(uid, userData, now) {
+  const existing = await db
+    .collection("reminders")
+    .where("uid", "==", uid)
+    .where("kind", "==", "daily")
+    .where("notified", "==", false)
+    .get();
+  await Promise.all(existing.docs.map((d) => d.ref.delete()));
+
+  if (!userData || !userData.fcmToken) return;
+
+  const settings = userData.notificationSettings || {};
+  if (settings.enabled === false) return;
+
+  const { scheduleKey, time } = computeDailyReminderSchedule(settings, now);
+  if (!scheduleKey || !time) {
+    console.log(`許可時間帯が見つからずうっかり防止リマインダーをスキップ: uid=${uid}`);
+    return;
+  }
+
+  await db.collection("reminders").add({
+    uid,
+    kind: "daily",
+    scheduleKey,
+    title: pickRandomDailyReminderMessage(),
+    body: "うっかり防止リマインダー",
+    remindAt: admin.firestore.Timestamp.fromDate(time),
+    fcmToken: userData.fcmToken,
+    notified: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+// タスクの作成・更新・削除のたびに、そのタスクのバッチ予約・固定リマインダー予約を作り直す。
+// 両者は独立した条件（頻度指定の有無／fixedReminders設定の有無）で判定するため、それぞれ個別に
+// 「対象なら作り直す、対象外になったなら未通知分を消す」を行う。
 exports.onTaskWritten = onDocumentWritten("users/{uid}/tasks/{taskId}", async (event) => {
   const { uid, taskId } = event.params;
   const after = event.data.after.exists ? event.data.after.data() : null;
+  const now = new Date();
 
-  if (!isChainableTask(after)) {
+  const userSnap = await db.collection("users").doc(uid).get();
+  const userData = userSnap.exists ? userSnap.data() : null;
+
+  if (isChainableTask(after)) {
+    await regenerateTaskBatch(uid, taskId, after, userData, now);
+  } else {
     // タスクが削除・完了・無効化・単発通知(頻度なし)になった場合は、未通知のバッチ予約を止める
-    // 「この日時に必ず通知する」個別リマインダー(kind === "fixed")はここでは消さない
-    const stale = await db
+    const staleBatch = await db
       .collection("reminders")
       .where("uid", "==", uid)
       .where("taskId", "==", taskId)
       .where("kind", "==", "batch")
       .where("notified", "==", false)
       .get();
-    await Promise.all(stale.docs.map((d) => d.ref.delete()));
-    return;
+    await Promise.all(staleBatch.docs.map((d) => d.ref.delete()));
   }
 
-  const userSnap = await db.collection("users").doc(uid).get();
-  const userData = userSnap.exists ? userSnap.data() : null;
-  await regenerateTaskBatch(uid, taskId, after, userData, new Date());
+  if (shouldScheduleFixedReminders(after)) {
+    await regenerateFixedReminders(uid, taskId, after, userData, now);
+  } else {
+    // タスクが削除・完了・無効化になった、またはfixedRemindersが空になった場合は未通知分を止める
+    const staleFixed = await db
+      .collection("reminders")
+      .where("uid", "==", uid)
+      .where("taskId", "==", taskId)
+      .where("kind", "==", "fixed")
+      .where("notified", "==", false)
+      .get();
+    await Promise.all(staleFixed.docs.map((d) => d.ref.delete()));
+  }
 });
 
-// 毎日0:05(JST)に、日単位タスクは当日分、週単位タスクは月曜のみ週全体分のバッチ予約を作り直す
+// 毎日0:05(JST)に、日単位タスクは当日分、週単位タスクは月曜のみ週全体分のバッチ予約を作り直す。
+// うっかり防止リマインダー(kind: "daily")もタスクとは独立に、全ユーザーぶん同じタイミングで作り直す。
 exports.regenerateReminderSchedules = onSchedule(
   {
     schedule: "5 0 * * *",
@@ -274,7 +495,7 @@ exports.regenerateReminderSchedules = onSchedule(
     const tasksSnap = await db.collectionGroup("tasks").get();
     const userDataCache = new Map();
 
-    const promises = tasksSnap.docs.map(async (taskDoc) => {
+    const taskPromises = tasksSnap.docs.map(async (taskDoc) => {
       const task = taskDoc.data();
       if (!isChainableTask(task)) return;
 
@@ -290,7 +511,12 @@ exports.regenerateReminderSchedules = onSchedule(
       await regenerateTaskBatch(uid, taskDoc.id, task, userDataCache.get(uid), now);
     });
 
-    await Promise.all(promises);
+    const usersSnap = await db.collection("users").get();
+    const dailyReminderPromises = usersSnap.docs.map((userDoc) =>
+      regenerateDailyReminder(userDoc.id, userDoc.data(), now)
+    );
+
+    await Promise.all([...taskPromises, ...dailyReminderPromises]);
   }
 );
 
@@ -313,19 +539,24 @@ exports.sendReminderNotifications = onSchedule(
 
     const promises = snapshot.docs.map(async (doc) => {
       const data = doc.data();
+      let notificationTitle = data.title || "リマインダー";
 
-      const taskRef = db.collection("users").doc(data.uid).collection("tasks").doc(data.taskId);
-      const taskSnap = await taskRef.get();
-      const task = taskSnap.exists ? taskSnap.data() : null;
+      // うっかり防止リマインダー(kind: "daily")はタスクに紐付かないため、タスクの存在・完了チェックは行わない。
+      if (data.kind !== "daily") {
+        const taskRef = db.collection("users").doc(data.uid).collection("tasks").doc(data.taskId);
+        const taskSnap = await taskRef.get();
+        const task = taskSnap.exists ? taskSnap.data() : null;
 
-      if (!taskSnap.exists || task.status === "完了") {
-        console.log("タスクが完了済み/削除済み。通知をキャンセルして削除。", doc.id);
-        await doc.ref.delete();
-        return;
+        if (!taskSnap.exists || task.status === "完了") {
+          console.log("タスクが完了済み/削除済み。通知をキャンセルして削除。", doc.id);
+          await doc.ref.delete();
+          return;
+        }
+
+        notificationTitle = task.title || task.name || data.title || "リマインダー";
       }
 
       if (data.fcmToken) {
-        const notificationTitle = task.title || task.name || data.title || "リマインダー";
         try {
           // notificationフィールドを使うとブラウザが自動表示し、SW側のonBackgroundMessageでの
           // 手動表示と重複して二重通知になるため、dataのみで送りSW側の表示に一本化する

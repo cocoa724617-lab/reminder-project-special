@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTasks, useLabelNames, useRecentCompletedTasks } from "../hooks/useTasks.js";
+import { useNow } from "../hooks/useNow.js";
 import { celebrateCompletion } from "../utils/celebrate.js";
 import { getRepeatCycleStatus } from "../utils/taskLabels.js";
 import TaskCard from "../components/TaskCard.jsx";
@@ -20,6 +21,9 @@ function TaskListPage() {
   const { tasks, isLoading, error, completeTask, removeTask } = useTasks();
   const labelNames = useLabelNames();
   const navigate = useNavigate();
+  // 繰り返しタスクの「次回期限が来たか」判定用。ページを開きっぱなしでも定期的に更新され、
+  // 次回期限を過ぎた繰り返しタスクが自動で完了済みから未完了へ移るようにする。
+  const now = useNow();
   // 通常タスクの完了履歴（完了済みセクション用）。繰り返しタスクの「今回分完了済みか」は
   // tasks側のlastCompletedAt/dueDateだけで判定できるためここでは使わない。
   const {
@@ -90,17 +94,19 @@ function TaskListPage() {
   }
 
   // 未完了：繰り返しタスクで「今回分」を完了済み（次のdueDateがまだ来ていない）のものは除く。
-  const pendingTasks = sortTasks(tasks.filter((task) => !getRepeatCycleStatus(task)));
+  const pendingTasks = sortTasks(tasks.filter((task) => !getRepeatCycleStatus(task, now)));
 
   // 完了済み①：繰り返しタスクで今回分を完了済みのもの（tasksコレクションに残ったまま、次回情報を表示）。
   const cycleCompletedTasks = tasks
-    .map((task) => ({ task, cycleStatus: getRepeatCycleStatus(task) }))
+    .map((task) => ({ task, cycleStatus: getRepeatCycleStatus(task, now) }))
     .filter((entry) => entry.cycleStatus);
 
-  // 完了済み②：通常タスクの完了履歴（繰り返しタスクの分は①と二重表示になるため除く）。
+  // 完了済み②：通常タスクの完了履歴（繰り返しタスクの分は①と二重表示になるため除く。
+  // removedFromHistoryは一覧から消したいだけの論理削除フラグなのでここでも除く。
+  // 集計側(userStatusUtils.js)はこのフラグを見ないため、達成率には影響しない）。
   const cycleCompletedTaskIds = new Set(cycleCompletedTasks.map(({ task }) => task.id));
   const standaloneCompletedEntries = completedTasks.filter(
-    (entry) => !cycleCompletedTaskIds.has(entry.originalTaskId),
+    (entry) => !entry.removedFromHistory && !cycleCompletedTaskIds.has(entry.originalTaskId),
   );
 
   const hasCompletedSection = cycleCompletedTasks.length > 0 || standaloneCompletedEntries.length > 0;
@@ -157,8 +163,11 @@ function TaskListPage() {
         </>
       )}
 
-      <Link to="/tasks/new" className="fab-button" aria-label="タスクを追加">
-        +
+      <Link to="/tasks/new" className="fab-button">
+        <span className="fab-button-icon" aria-hidden="true">
+          +
+        </span>
+        タスクを追加
       </Link>
     </section>
   );

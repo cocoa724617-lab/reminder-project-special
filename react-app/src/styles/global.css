@@ -1,21 +1,37 @@
 /* 既存アプリの style.css から、実績・記録画面(StatsPage)の再現に必要な部分だけを抜粋してコピーしたもの。
    元の style.css 自体は変更しない。差分が出た場合はこのファイル側だけを直す。 */
 
-/* ===== カラートークン ===== */
+/* ===== カラートークン =====
+   ステータスイラスト（react-app/public/assets/status/）のクリーム地・セージティール・
+   ラベンダー・マスタードのトーンに合わせた配色。UIの色とイラストの色を揃えることで
+   「HTMLの部品感」を減らし、アプリ全体として統一されたトーンに見せる。 */
 :root {
-  --bg: #ffffff;
+  --bg: #faf5ec;
   --surface: #ffffff;
-  --surface-alt: #f4f4f6;
-  --border: #e2e2e6;
-  --text: #1a1a1e;
-  --text-dim: #6b6b72;
-  --accent: #2f6fed;
-  --accent-dark: #1d54c4;
+  --surface-alt: #f1e8d9;
+  --border: #e6d9c3;
+  --text: #332b22;
+  --text-dim: #8a7f6e;
+  --shadow-rgb: 51, 43, 34;
+
+  --accent: #3f8e7e;
+  --accent-dark: #2e6e61;
   --accent-contrast: #ffffff;
-  --accent-tint: rgba(47, 111, 237, 0.08);
-  --success: #1f9d73;
-  --danger: #e5484d;
-  --later: #9a6b0a;
+  --accent-rgb: 63, 142, 126;
+  --accent-tint: rgba(var(--accent-rgb), 0.1);
+
+  /* あとでやる・発見度などプライマリと区別したい要素用のセカンドカラー（イラストのラベンダー由来）。 */
+  --accent-secondary: #8b7bb5;
+  --accent-secondary-dark: #6f5f9c;
+  --accent-secondary-rgb: 139, 123, 181;
+  --accent-secondary-tint: rgba(var(--accent-secondary-rgb), 0.12);
+
+  --success: #4c9b6e;
+  --success-rgb: 76, 155, 110;
+  --danger: #e0645c;
+  --danger-rgb: 224, 100, 92;
+  --later: #c08a2e;
+  --later-rgb: 192, 138, 46;
   --header-height: 56px;
 }
 
@@ -89,6 +105,7 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 11px;
   background: var(--surface);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -114,7 +131,7 @@ h2 {
 .nav-drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(20, 20, 24, 0.38);
+  background: rgba(var(--shadow-rgb), 0.38);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -134,7 +151,7 @@ h2 {
   width: min(280px, 82%);
   background: var(--surface);
   border-right: 1px solid var(--border);
-  box-shadow: 8px 0 32px rgba(20, 20, 24, 0.12);
+  box-shadow: 8px 0 32px rgba(var(--shadow-rgb), 0.12);
   transform: translateX(-100%);
   transition: transform 0.24s ease;
   z-index: 41;
@@ -212,10 +229,13 @@ h2 {
   padding: 24px;
   border-radius: 22px;
   border: 1px solid var(--border);
-  box-shadow: 0 8px 24px rgba(20, 20, 24, 0.05);
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.05);
 }
 
-/* ===== ボタン共通 ===== */
+/* ===== ボタン共通 =====
+   フラットな矩形だとフォームの送信ボタンに見えてしまうため、影と押下時の沈み込みで
+   「タップできる立体物」の質感を出す。主要導線は1画面1つを基本とし、それ以外は
+   .btn-secondary（トーンを抑えたテキスト寄りのボタン）で視覚的な優先度を下げる。 */
 button {
   width: min(360px, 100%);
   max-width: 360px;
@@ -225,15 +245,27 @@ button {
   background-color: var(--accent);
   color: var(--accent-contrast);
   border: none;
-  border-radius: 16px;
+  border-radius: 18px;
   font-size: 16px;
   font-weight: bold;
   cursor: pointer;
   margin: 12px auto 0;
+  box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.28);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 
 button:hover {
   background-color: var(--accent-dark);
+}
+
+button:active {
+  transform: scale(0.98);
+  box-shadow: 0 3px 10px rgba(var(--accent-rgb), 0.24);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* ===== ログイン画面 ===== */
@@ -256,7 +288,7 @@ button:hover {
   border-radius: 24px;
   padding: 32px 24px;
   text-align: center;
-  box-shadow: 0 8px 24px rgba(20, 20, 24, 0.06);
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.06);
 }
 
 .notification-icon {
@@ -375,7 +407,7 @@ button:hover {
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 22px;
-  box-shadow: 0 4px 16px rgba(20, 20, 24, 0.05);
+  box-shadow: 0 4px 16px rgba(var(--shadow-rgb), 0.05);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -424,6 +456,58 @@ button:hover {
   overflow-wrap: anywhere;
 }
 
+/* タスクカードの重要度・予定・メモなどの副次情報を開閉するトグル。常時全部を並べると
+   管理画面のように見えてしまうため、普段はタイトル・日時・状態だけを見せ、詳細はここから開く。 */
+.task-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  max-width: none;
+  margin: 2px 0 0;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.task-details-toggle:hover {
+  background: none;
+  color: var(--accent-dark);
+}
+
+.task-details-toggle-icon {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.task-details-toggle.is-expanded .task-details-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.task-details {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+
+.task-details.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.task-details-inner {
+  overflow: hidden;
+}
+
+.task-details-inner > *:first-child {
+  margin-top: 10px;
+}
+
 .status-pill {
   display: inline-block;
   font-size: 12px;
@@ -433,17 +517,17 @@ button:hover {
 }
 
 .status-pill.status-pending {
-  background: rgba(47, 111, 237, 0.12);
+  background: rgba(var(--accent-rgb), 0.12);
   color: var(--accent-dark);
 }
 
 .status-pill.status-later {
-  background: rgba(154, 107, 10, 0.14);
+  background: rgba(var(--later-rgb), 0.14);
   color: var(--later);
 }
 
 .status-pill.status-cycle-done {
-  background: rgba(31, 157, 115, 0.14);
+  background: rgba(var(--success-rgb), 0.14);
   color: var(--success);
 }
 
@@ -466,7 +550,7 @@ button:hover {
 }
 
 .meta-pill-importance-high {
-  background: rgba(229, 72, 77, 0.12);
+  background: rgba(var(--danger-rgb), 0.12);
   color: var(--danger);
 }
 
@@ -543,6 +627,7 @@ button:hover {
   border-radius: 50%;
   border: 2px solid var(--border);
   background: transparent;
+  box-shadow: none;
   font-size: 18px;
   font-weight: 800;
   line-height: 1;
@@ -597,9 +682,10 @@ button:hover {
   margin: 0;
   padding: 0 20px;
   border-radius: 999px;
-  border: 1.5px solid var(--accent);
-  background: var(--accent-tint);
-  color: var(--accent-dark);
+  border: 1.5px solid var(--accent-secondary);
+  background: var(--accent-secondary-tint);
+  color: var(--accent-secondary-dark);
+  box-shadow: none;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -607,7 +693,7 @@ button:hover {
 }
 
 .task-postpone-pill:hover {
-  background: var(--accent);
+  background: var(--accent-secondary);
   color: var(--accent-contrast);
 }
 
@@ -622,6 +708,7 @@ button:hover {
   border: none;
   border-radius: 50%;
   background: transparent;
+  box-shadow: none;
   color: var(--text-dim);
   display: flex;
   align-items: center;
@@ -636,7 +723,7 @@ button:hover {
 
 .task-delete-icon:hover,
 .task-delete-icon:focus-visible {
-  background: rgba(229, 72, 77, 0.12);
+  background: rgba(var(--danger-rgb), 0.12);
   color: var(--danger);
 }
 
@@ -662,6 +749,59 @@ button:hover {
 .completion-toast.is-visible {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* ===== 新規ステータス発見時の演出（トースト） ===== */
+.status-discovery-toast {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  transform: translate(-50%, -12px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 32px));
+  background: var(--text);
+  color: var(--surface);
+  padding: 10px 18px 10px 10px;
+  border-radius: 18px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.status-discovery-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.status-discovery-toast-image {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 50%;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.status-discovery-toast-body {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.status-discovery-toast-label {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.status-discovery-toast-name {
+  font-size: 14px;
+  font-weight: 800;
 }
 
 /* ===== 共通ページ本文 ===== */
@@ -843,41 +983,62 @@ button:hover {
   cursor: not-allowed;
 }
 
-/* ===== フローティング＋ボタン ===== */
+/* ===== フローティング「タスクを追加」ボタン ===== */
 .fab-button {
   position: fixed;
   left: 20px;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  border: 3px solid var(--surface);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-size: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  max-width: calc(100vw - 40px);
+  padding: 0 20px 0 6px;
+  border-radius: 999px;
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
   font-weight: 700;
   line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 12px 28px rgba(47, 111, 237, 0.45), 0 0 0 4px var(--accent-tint);
+  box-shadow: 0 10px 26px rgba(var(--accent-rgb), 0.25), 0 0 0 4px var(--accent-tint);
   z-index: 24;
   text-decoration: none;
   animation: fab-pulse 2.4s ease-in-out infinite;
 }
 
+.fab-button-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .fab-button:hover {
+  border-color: var(--accent-dark);
+}
+
+.fab-button:hover .fab-button-icon {
   background: var(--accent-dark);
 }
 
 .fab-button:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 
 @keyframes fab-pulse {
-  0%, 100% { box-shadow: 0 12px 28px rgba(47, 111, 237, 0.45), 0 0 0 4px var(--accent-tint); }
-  50% { box-shadow: 0 12px 28px rgba(47, 111, 237, 0.55), 0 0 0 9px var(--accent-tint); }
+  0%, 100% { box-shadow: 0 10px 26px rgba(var(--accent-rgb), 0.25), 0 0 0 4px var(--accent-tint); }
+  50% { box-shadow: 0 10px 26px rgba(var(--accent-rgb), 0.35), 0 0 0 8px var(--accent-tint); }
 }
 
 /* ===== ホーム画面 ===== */
@@ -1007,9 +1168,9 @@ button:hover {
   align-items: center;
   text-align: center;
   gap: 16px;
-  border-color: rgba(47, 111, 237, 0.34);
-  background: linear-gradient(180deg, var(--surface) 0%, rgba(47, 111, 237, 0.06) 100%);
-  box-shadow: 0 12px 34px rgba(20, 20, 24, 0.08);
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: linear-gradient(180deg, var(--surface) 0%, rgba(var(--accent-rgb), 0.06) 100%);
+  box-shadow: 0 12px 34px rgba(var(--shadow-rgb), 0.08);
 }
 
 .current-status-image {
@@ -1075,6 +1236,107 @@ button:hover {
   text-align: center;
 }
 
+.status-discovery-card {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.status-discovery-count {
+  margin: 0;
+  text-align: center;
+}
+
+.status-discovery-value {
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.status-discovery-total {
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.status-discovery-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.status-discovery-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-secondary);
+  transition: width 0.3s ease;
+}
+
+.status-discovery-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+}
+
+.status-discovery-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.status-discovery-item.is-locked {
+  opacity: 0.55;
+}
+
+.status-discovery-image {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.status-discovery-placeholder {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-dim);
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 50%;
+}
+
+.status-discovery-name {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.status-discovery-item.is-discovered .status-discovery-name {
+  color: var(--text);
+}
+
 .next-task-card {
   border: 1.5px solid var(--accent);
 }
@@ -1132,6 +1394,77 @@ button:hover {
   margin-bottom: 0;
 }
 
+/* フォームを「基本情報／期限・繰り返し／通知」のかたまりに分けるための薄い区切り線。
+   新しい見出しテキストは増やさず、余白と罫線だけで塊を分けて壁のような並びを避ける。 */
+.form-section-divider {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+
+/* 通知回数・固定通知時刻はデフォルトのままで使う人が多いため折り畳んでおき、
+   触りたい人だけがタップして開く（常時表示だとピルボタンの壁になってしまうため）。 */
+.field-disclosure-toggle {
+  width: 100%;
+  max-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.field-disclosure-toggle:hover {
+  background: var(--border);
+}
+
+.field-disclosure-summary {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.field-disclosure-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+}
+
+.field-disclosure-toggle.is-expanded .field-disclosure-icon {
+  transform: rotate(180deg);
+}
+
+.field-disclosure-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+
+.field-disclosure-panel.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.field-disclosure-panel-inner {
+  overflow: hidden;
+}
+
+.field-disclosure-panel-inner > *:first-child {
+  margin-top: 18px;
+}
+
 input.modal-name-input {
   width: 100%;
   padding: 16px 18px;
@@ -1162,6 +1495,7 @@ input.modal-name-input:focus {
   border-radius: 50%;
   border: 2px solid var(--border);
   background-color: var(--swatch-color);
+  box-shadow: none;
   padding: 0;
   margin: 0;
   display: flex;
@@ -1208,6 +1542,7 @@ input.modal-name-input:focus {
   border-radius: 50%;
   border: none;
   background-color: var(--surface-alt);
+  box-shadow: none;
   color: var(--text);
   font-size: 20px;
   cursor: pointer;
@@ -1263,6 +1598,7 @@ input.modal-name-input:focus {
   border-radius: 50%;
   border: none;
   background-color: var(--surface);
+  box-shadow: none;
   color: var(--text);
   font-size: 18px;
   cursor: pointer;
@@ -1299,6 +1635,7 @@ input.modal-name-input:focus {
   border: none;
   border-radius: 12px;
   background: transparent;
+  box-shadow: none;
   color: var(--text);
   font-size: 14px;
   cursor: pointer;
@@ -1387,6 +1724,56 @@ input.modal-name-input:focus {
   transform: translateX(20px);
 }
 
+/* ネイティブのラジオ/チェックボックスをそのまま出すと一気にHTMLフォームに見えるため、
+   選択肢は見えないinputを内包したピル（チップ）として見せる（ios-toggleと同じ考え方）。 */
+.choice-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 20px;
+}
+
+.choice-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  margin: 0;
+}
+
+.choice-chip:hover {
+  background: var(--surface-alt);
+}
+
+.choice-chip:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.choice-chip.is-selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.choice-chip-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .notification-frequency-field {
   display: grid;
   gap: 12px;
@@ -1409,6 +1796,7 @@ input.modal-name-input:focus {
   border: none;
   border-radius: 12px;
   background: transparent;
+  box-shadow: none;
   color: var(--text-dim);
   font-size: 15px;
   font-weight: 700;
@@ -1485,57 +1873,17 @@ input.modal-name-input:focus {
   line-height: 1.5;
 }
 
-.fixed-reminder-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.fixed-reminder-card {
-  padding: 12px;
-  border-radius: 18px;
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-}
-
-.fixed-reminder-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.fixed-reminder-value {
-  flex: 1;
-  min-width: 0;
+.fixed-reminder-disabled-note {
+  margin: 0;
   padding: 12px;
   border-radius: 14px;
   background-color: var(--surface-alt);
-  color: var(--text);
-  font-size: 14px;
-  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.fixed-reminder-remove {
-  width: 38px;
-  height: 38px;
-  min-width: 0;
-  max-width: none;
-  flex-shrink: 0;
-  border-radius: 50%;
-  border: none;
-  background-color: var(--surface-alt);
-  color: var(--danger);
-  font-size: 18px;
-  cursor: pointer;
-  margin: 0;
-  padding: 0;
-}
-
-.fixed-reminder-remove:hover {
-  background-color: var(--border);
-}
-
+/* QuietHoursSettings（通知設定画面の「除外時間帯を追加」ボタン）でも共用。 */
 .add-fixed-reminder-button {
   width: 100%;
   max-width: none;
@@ -1544,6 +1892,7 @@ input.modal-name-input:focus {
   border-radius: 14px;
   border: 1px dashed var(--border);
   background: transparent;
+  box-shadow: none;
   color: var(--accent);
   font-size: 14px;
   font-weight: 600;
@@ -1554,12 +1903,62 @@ input.modal-name-input:focus {
   background-color: var(--surface-alt);
 }
 
+.fixed-reminder-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fixed-reminder-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fixed-reminder-group-label {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fixed-reminder-option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fixed-reminder-option {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fixed-reminder-option:hover {
+  background-color: var(--surface-alt);
+}
+
+.fixed-reminder-option.is-selected {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
 .delete-task-button {
   width: 100%;
   max-width: none;
   margin: 8px 0 0;
   background: transparent;
   border: none;
+  box-shadow: none;
   color: var(--danger);
   font-size: 16px;
   font-weight: 700;
@@ -1568,7 +1967,7 @@ input.modal-name-input:focus {
 }
 
 .delete-task-button:hover {
-  background-color: rgba(255, 69, 58, 0.1);
+  background-color: rgba(var(--danger-rgb), 0.1);
   border-radius: 14px;
 }
 
@@ -1581,7 +1980,7 @@ form,
   padding: 24px;
   border-radius: 22px;
   border: 1px solid var(--border);
-  box-shadow: 0 8px 24px rgba(20, 20, 24, 0.05);
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb), 0.05);
 }
 
 .form-group {
@@ -1628,18 +2027,27 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.15);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
 }
 
 /* ===== ボタンのバリエーション ===== */
+/* 主導線（保存など）の隣に置く控えめな選択肢。枠や影を持たせず、テキストに近い
+   軽さにすることで「フォームのボタン列」に見えるのを避け、主ボタンだけを目立たせる。 */
 .btn-secondary {
-  background-color: var(--surface-alt);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background-color: transparent;
+  color: var(--text-dim);
+  border: none;
+  box-shadow: none;
+  font-weight: 700;
 }
 
 .btn-secondary:hover {
-  background-color: #e9e9ec;
+  background-color: var(--surface-alt);
+  color: var(--text);
+}
+
+.btn-secondary:active {
+  box-shadow: none;
 }
 
 a.button-link {
@@ -1650,16 +2058,40 @@ a.button-link {
   padding: 14px;
   background-color: var(--accent);
   color: var(--accent-contrast);
-  border-radius: 16px;
+  border-radius: 18px;
   font-size: 16px;
   font-weight: bold;
   text-decoration: none;
   cursor: pointer;
   margin: 12px auto 0;
+  box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.28);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 
 a.button-link:hover {
   background-color: var(--accent-dark);
+}
+
+a.button-link:active {
+  transform: scale(0.98);
+  box-shadow: 0 3px 10px rgba(var(--accent-rgb), 0.24);
+}
+
+/* a.button-link は type+class の分だけ .btn-secondary より詳細度が高く、組み合わせて
+   使うと素の .btn-secondary が負けてしまうため、組み合わせ用に明示的に上書きする。 */
+a.button-link.btn-secondary {
+  background-color: transparent;
+  color: var(--text-dim);
+  box-shadow: none;
+}
+
+a.button-link.btn-secondary:hover {
+  background-color: var(--surface-alt);
+  color: var(--text);
+}
+
+a.button-link.btn-secondary:active {
+  box-shadow: none;
 }
 
 .actions {
@@ -1816,6 +2248,7 @@ a.button-link:hover {
   border: 1px solid var(--border);
   border-radius: 14px;
   background-color: var(--surface);
+  box-shadow: none;
   color: var(--text);
 }
 
@@ -1827,7 +2260,7 @@ a.button-link:hover {
   background-color: var(--accent);
   color: var(--accent-contrast);
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(47, 111, 237, 0.18);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.18);
 }
 
 /* ===== 後回し回数の確認モーダル（postpone-limit-modal相当） ===== */

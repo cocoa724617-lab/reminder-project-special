@@ -63,6 +63,9 @@ function TaskCard({
   onPostpone,
 }) {
   const [isCompleting, setIsCompleting] = useState(false);
+  // 重要度・予定・メモなどの副次情報はデフォルトで畳んでおき、タップした人にだけ見せる
+  // （常時全部表示すると管理画面のように見えてしまうため）。
+  const [isExpanded, setIsExpanded] = useState(false);
 
   if (!task) return null;
 
@@ -110,6 +113,25 @@ function TaskCard({
     if (typeof onPostpone !== "function") return;
     onPostpone(task);
   }
+
+  function handleToggleExpand(event) {
+    event.stopPropagation();
+    setIsExpanded((prev) => !prev);
+  }
+
+  const detailsToggle = (
+    <button
+      type="button"
+      className={`task-details-toggle${isExpanded ? " is-expanded" : ""}`}
+      aria-expanded={isExpanded}
+      onClick={handleToggleExpand}
+    >
+      {isExpanded ? "詳細を閉じる" : "詳細を見る"}
+      <span className="task-details-toggle-icon" aria-hidden="true">
+        ▾
+      </span>
+    </button>
+  );
 
   const completeButton = (
     <button
@@ -189,17 +211,20 @@ function TaskCard({
                 📅 元の期限：{task.dueDate || task.date || "未設定"}
                 {task.dueTime ? ` ${task.dueTime}` : ""}
               </p>
-              <MetaPillRow task={task} labelNames={labelNames} />
-              <p className="task-memo">メモ：{memo || "なし"}</p>
-              <p className="task-memo">あとでやるにした時間：{task.laterTime || "未設定"}</p>
-              <p className="task-memo">後回しにした回数：{task.laterCount || 0}回</p>
-              <p className="task-memo">最後に後回しにした日：{formatDate(task.lastPostponedAt, "記録なし")}</p>
+              {detailsToggle}
+              <div className={`task-details${isExpanded ? " is-expanded" : ""}`}>
+                <div className="task-details-inner">
+                  <MetaPillRow task={task} labelNames={labelNames} />
+                  <p className="task-memo">メモ：{memo || "なし"}</p>
+                  <p className="task-memo">あとでやるにした時間：{task.laterTime || "未設定"}</p>
+                  <p className="task-memo">後回しにした回数：{task.laterCount || 0}回</p>
+                  <p className="task-memo">最後に後回しにした日：{formatDate(task.lastPostponedAt, "記録なし")}</p>
+                </div>
+              </div>
             </>
           ) : (
             <>
               <p className="task-remind">📅 {getReminderLabel(task)}</p>
-              <MetaPillRow task={task} labelNames={labelNames} />
-              <p className="task-memo">メモ：{memo || "なし"}</p>
               {cycleStatus ? (
                 <span className="status-pill status-cycle-done">
                   次回：{formatDateTimeJa(cycleStatus.nextDueDate)}
@@ -209,6 +234,13 @@ function TaskCard({
                   {later ? "後でやる" : "未完了"}
                 </span>
               )}
+              {detailsToggle}
+              <div className={`task-details${isExpanded ? " is-expanded" : ""}`}>
+                <div className="task-details-inner">
+                  <MetaPillRow task={task} labelNames={labelNames} />
+                  <p className="task-memo">メモ：{memo || "なし"}</p>
+                </div>
+              </div>
             </>
           )}
         </div>

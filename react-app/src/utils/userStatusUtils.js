@@ -277,6 +277,38 @@ function copyStatus(key) {
   return { ...STATUS_DEFINITIONS[key] };
 }
 
+export const ALL_STATUS_KEYS = Object.keys(STATUS_DEFINITIONS);
+
+// 既に発見済みのステータスキー一覧に、今回新たに該当したステータスをマージする。
+// Setで管理するため、同じキーが複数回渡されても発見数が二重にカウントされることはない。
+// STATUS_DEFINITIONSに存在しないキー（過去バージョンの残骸など）は無視する。
+export function discoverStatusKeys(existingDiscoveredKeys, newlyDetectedStatuses) {
+  const discovered = new Set(asArray(existingDiscoveredKeys).filter((key) => STATUS_DEFINITIONS[key]));
+
+  asArray(newlyDetectedStatuses).forEach((status) => {
+    const key = typeof status === "string" ? status : status && status.key;
+    if (key && STATUS_DEFINITIONS[key]) discovered.add(key);
+  });
+
+  return Array.from(discovered);
+}
+
+// ホーム画面下部の「ステータス発見度」表示用：全ステータス中いくつ発見済みかと、
+// 一覧（発見済みかどうかのフラグ付き）をまとめて返す。
+export function getStatusDiscoveryStats(discoveredKeys) {
+  const uniqueDiscoveredKeys = discoverStatusKeys(discoveredKeys, []);
+  const discoveredSet = new Set(uniqueDiscoveredKeys);
+
+  return {
+    discoveredCount: uniqueDiscoveredKeys.length,
+    totalCount: ALL_STATUS_KEYS.length,
+    statuses: ALL_STATUS_KEYS.map((key) => ({
+      ...STATUS_DEFINITIONS[key],
+      discovered: discoveredSet.has(key),
+    })),
+  };
+}
+
 function getStatsArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -361,6 +393,9 @@ function computeRangeProgress(activeTasks, completedTaskList, rangeStart, rangeE
     completionTargetCount,
     completionRate,
     postponeRate: round(safeDivide(postponedTasksCount, rangeTaskPool.length), 4),
+    // completionRate/completedCountの集計はremovedFromHistory（完了済み一覧からの論理削除）を無視して
+    // 全件を対象にするが、この一覧表示用データだけはremovedFromHistoryを持ち越し、呼び出し側で
+    // 除外できるようにする（一覧からは消したいという操作者の意図を反映するため）。
     completedTasks: rangeCompletedTasks
       .slice()
       .sort((a, b) => getCompletedDate(b) - getCompletedDate(a))
@@ -369,6 +404,7 @@ function computeRangeProgress(activeTasks, completedTaskList, rangeStart, rangeE
         name: getTaskName(task),
         completedAt: getCompletedDate(task),
         isFromLater: getLaterCount(task) > 0,
+        removedFromHistory: !!task.removedFromHistory,
       })),
   };
 }
@@ -412,7 +448,11 @@ export function getUserStatusesFromStats(stats) {
   const totalLaterCount = Math.max(0, safeNumber(safeStats.totalLaterCount));
   const routineCompletedTaskNames = getStatsArray(safeStats.routineCompletedTaskNames);
 
-  if (averageRegisteredTasksPerDay < 1) {
+  // 新規登録数だけで判定すると、既存タスクを黙々とこなしているだけの利用者（今週新しいタスクを
+  // 登録していないだけ）や、期限切れで諦めたタスクを削除しただけの利用者まで「バカンス中」に
+  // なってしまう（totalTasksはactiveTasks+直近14日の完了済みタスクの件数なので、これが0＝
+  // アクティブなタスクも直近の完了実績も無い、という本当に何もしていない状態でのみ発動させる）。
+  if (averageRegisteredTasksPerDay < 1 && totalTasks === 0) {
     return [copyStatus("vacationMode")];
   }
 

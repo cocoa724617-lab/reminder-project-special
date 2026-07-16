@@ -28,6 +28,7 @@ function CompletedTasksPage() {
 
   const filteredTasks = useMemo(() => {
     return completedTasks
+      .filter((task) => !task.removedFromHistory)
       .filter((task) => labelFilter === "all" || (task.color || "none") === labelFilter)
       .filter((task) => matchesPeriod(task, periodFilter))
       .sort((a, b) => {

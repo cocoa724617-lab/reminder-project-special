@@ -136,24 +136,34 @@ function NotificationSettingsPage() {
 
         <h2>通知タイプ（デフォルト）</h2>
         <p>ここで設定した通知タイプはタスク側で個別に上書きできます。</p>
-        <label>
-          <input
-            type="checkbox"
-            checked={notificationTypes.includes("browser")}
-            onChange={() => toggleNotificationType("browser")}
-          />
-          ブラウザ通知
-        </label>
+        <div className="modal-field-row">
+          <span className="modal-field-label">ブラウザ通知</span>
+          <label className="ios-toggle">
+            <input
+              type="checkbox"
+              checked={notificationTypes.includes("browser")}
+              onChange={() => toggleNotificationType("browser")}
+            />
+            <span className="ios-toggle-track">
+              <span className="ios-toggle-thumb"></span>
+            </span>
+          </label>
+        </div>
 
         <MessageTypeSelector value={messageType} onChange={setMessageType} />
 
         <LabelNameSettings labelNames={labelNamesForm} onChange={setLabelNamesForm} />
 
         <h2>その他</h2>
-        <label>
-          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-          通知を有効にする
-        </label>
+        <div className="modal-field-row">
+          <span className="modal-field-label">通知を有効にする</span>
+          <label className="ios-toggle">
+            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+            <span className="ios-toggle-track">
+              <span className="ios-toggle-thumb"></span>
+            </span>
+          </label>
+        </div>
 
         {validationErrors.length > 0 && (
           <p className="error-message">
