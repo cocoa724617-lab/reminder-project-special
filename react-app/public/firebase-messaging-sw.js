@@ -15,13 +15,13 @@ try {
 
 // 既存 firebase-init.js / react-app/src/services/firebase.js と同じ設定値。
 firebase.initializeApp({
-  apiKey: "AIzaSyCHf5uiktc7MJIQ2oWopYoMTYyfS7CwkIw",
-  authDomain: "reminder-project-4b576.firebaseapp.com",
-  projectId: "reminder-project-4b576",
-  storageBucket: "reminder-project-4b576.firebasestorage.app",
-  messagingSenderId: "590449260772",
-  appId: "1:590449260772:web:c3b859071d04abdcaf94f1",
-  measurementId: "G-2364V1ENYR",
+  apiKey: "AIzaSyDjcQkCw9YSqw2a-VC-jQgM1xxrE-IucB8",
+  authDomain: "reminder-project-individual.firebaseapp.com",
+  projectId: "reminder-project-individual",
+  storageBucket: "reminder-project-individual.firebasestorage.app",
+  messagingSenderId: "468795170434",
+  appId: "1:468795170434:web:f7a1f644eca28ee5bcde9b",
+  measurementId: "G-PZX19T6TTD",
 });
 
 const messaging = firebase.messaging();
@@ -34,10 +34,13 @@ messaging.onBackgroundMessage((payload) => {
 
   const notificationTitle = payload.data?.title || "リマインダー";
   const taskId = payload.data?.taskId || null;
+  // この通知の元になったremindersドキュメントのID。「完了」アクションの二重実行防止
+  // （quickCompleteTaskのreminderIdガード）のために、クリック時までそのまま持ち回す。
+  const reminderId = payload.data?.reminderId || null;
 
   const notificationOptions = {
     body: payload.data?.body || "通知があります",
-    data: { taskId },
+    data: { taskId, reminderId },
   };
 
   if (taskId && quickActionSdkAvailable) {
@@ -94,7 +97,10 @@ function showQuickActionFailureNotification(action) {
 
 // 通知のアクションボタン用：Cloud FunctionsのquickCompleteTask/quickPostponeTaskを、
 // アプリを開かずService Worker内から直接呼ぶ。
-async function handleQuickAction(action, taskId) {
+// reminderIdは常にquickCompleteTaskへ渡す（quickPostponeTask側は今のところ使わず無視するだけ）。
+// 通知の二度押しや、通信不調によるこの呼び出し自体の再送があっても、
+// 同じreminderIdを渡す限りquickCompleteTask側で二重完了を防げる。
+async function handleQuickAction(action, taskId, reminderId) {
   if (!taskId) return;
   if (!quickActionSdkAvailable) {
     await showQuickActionFailureNotification(action);
@@ -104,7 +110,7 @@ async function handleQuickAction(action, taskId) {
   try {
     await waitForAuthUser();
     const functionName = action === "complete" ? "quickCompleteTask" : "quickPostponeTask";
-    const response = await firebase.functions().httpsCallable(functionName)({ taskId });
+    const response = await firebase.functions().httpsCallable(functionName)({ taskId, reminderId });
     if (!response || !response.data || response.data.ok !== true) {
       await showQuickActionFailureNotification(action);
     }
@@ -120,11 +126,12 @@ async function handleQuickAction(action, taskId) {
 self.addEventListener("notificationclick", (event) => {
   const { action, notification } = event;
   const taskId = notification.data && notification.data.taskId;
+  const reminderId = notification.data && notification.data.reminderId;
 
   notification.close();
 
   if (action === "complete" || action === "postpone_1h") {
-    event.waitUntil(handleQuickAction(action, taskId));
+    event.waitUntil(handleQuickAction(action, taskId, reminderId));
     return;
   }
 

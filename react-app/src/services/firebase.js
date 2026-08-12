@@ -7,13 +7,13 @@ import { getFirestore } from "firebase/firestore";
 // 使うため、設定値だけをそのままコピーしている。元ファイルは変更しない。
 // firebase-init.js 側の設定値を変更した場合は、こちらも合わせて更新すること。
 const firebaseConfig = {
-  apiKey: "AIzaSyCHf5uiktc7MJIQ2oWopYoMTYyfS7CwkIw",
-  authDomain: "reminder-project-4b576.firebaseapp.com",
-  projectId: "reminder-project-4b576",
-  storageBucket: "reminder-project-4b576.firebasestorage.app",
-  messagingSenderId: "590449260772",
-  appId: "1:590449260772:web:c3b859071d04abdcaf94f1",
-  measurementId: "G-2364V1ENYR",
+  apiKey: "AIzaSyDjcQkCw9YSqw2a-VC-jQgM1xxrE-IucB8",
+  authDomain: "reminder-project-individual.firebaseapp.com",
+  projectId: "reminder-project-individual",
+  storageBucket: "reminder-project-individual.firebasestorage.app",
+  messagingSenderId: "468795170434",
+  appId: "1:468795170434:web:f7a1f644eca28ee5bcde9b",
+  measurementId: "G-PZX19T6TTD",
 };
 
 export const app = initializeApp(firebaseConfig);

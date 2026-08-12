@@ -1,2 +1,2 @@
 // 既存 fcm-config.js の verbatim 移植。
-export const VAPID_KEY = "BNQkiNoM7mm428fE2dJ1lh2gkfzdNdBN85HDWjC0J96bPtVMzDChNNOWgTU5L6nyQfs6D5zj75-GGzX044Exrfc";
+export const VAPID_KEY = "BPCRrZwpSReB0NATP2sBE_t1tSdSGaxVnmmV7p72g9mZFc6afWU1wkLfB6O3jHYsHIiQQ8obfGk50ZSq-SLgB54";
