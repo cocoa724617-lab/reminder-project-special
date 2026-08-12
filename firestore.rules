@@ -1,11 +1,7 @@
 rules_version = '2';
 
-// リポジトリ内に firestore.rules が存在しなかったため、実際のクライアントコード
-// （tasks-data.js / user-data.js / react-app/src/services/*.js）が読み書きしている
-// コレクション構造から起こした新規案です。デプロイはしていません（本番ルールは未確認）。
-//
 // 対象コレクション：
-//   - users/{uid}                         … fcmToken / notificationSettings / labelNames
+//   - users/{uid}                         … fcmToken / notificationSettings / labelNames / ストリーク集計
 //   - users/{uid}/tasks/{taskId}          … 未完了タスク
 //   - users/{uid}/completedTasks/{id}     … 完了済みタスク履歴
 //   - reminders/{reminderId}              … uidフィールドで所有者を持つフラットなコレクション
@@ -14,19 +10,89 @@ rules_version = '2';
 //
 // Cloud Functions（functions/index.js）はすべて Admin SDK 経由のため、
 // このルールの影響を受けません（Admin SDKはセキュリティルールをバイパスします）。
+// つまり以下のデータ形式チェックは「クライアント（react-app）が直接書き込む経路」だけを対象にしており、
+// lastActionedReminderId・streakLastDate（Cloud Functions版のstreak更新）のようなAdmin SDK専用の
+// フィールドは対象外（チェックしなくてもクライアントからは触れない）。
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // users/{uid} 本体。fcmToken・notificationSettings・labelNames を保持する。
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    // ---- データ形式チェック用ヘルパー ----
+    // 「フィールドが存在する場合だけ型・値を確認する」方式にしている（hasOnly()で全項目を固定はしない）。
+    // 理由：フィールドを1つ追加するたびにルールも直さないと保存できなくなる、という壊れ方を避けたいため。
+    // 代わりに「書き込まれた値の形が壊れている（型違い・想定外の文字列など）のを防ぐ」ことに絞っている。
+    function isDateStr(v) {
+      return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
 
-    // users/{uid} 配下の全サブコレクション（tasks, completedTasks、将来追加分も含む）。
-    // 本人以外は一切アクセスできない。
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    function isTimeStr(v) {
+      return v is string && v.matches('^[0-9]{1,2}:[0-9]{2}$');
     }
+
+    // users/{uid}/tasks/{taskId} … taskService.saveTask / setTaskStatus / delayTaskWithLaterTime /
+    // completeTask（クライアント版）が書き込むフィールドの形をチェックする。
+    function isValidTaskWrite(data) {
+      return
+        (data.name is string || data.title is string) &&
+        (!('status' in data) || data.status in ['未完了', '後でやる']) &&
+        (!('repeat' in data) || data.repeat in ['none', 'daily', 'weekly', 'monthly', 'yearly']) &&
+        (!('priority' in data) || data.priority in ['low', 'medium', 'high']) &&
+        (!('urgency' in data) || data.urgency in ['today', 'thisWeek', 'whenFree']) &&
+        (!('color' in data) || data.color is string) &&
+        (!('enabled' in data) || data.enabled is bool) &&
+        (!('dueDate' in data) || data.dueDate == null || isDateStr(data.dueDate)) &&
+        (!('dueTime' in data) || data.dueTime == null || isTimeStr(data.dueTime)) &&
+        (!('fixedReminders' in data) || data.fixedReminders is list) &&
+        (!('laterCount' in data) || data.laterCount is number);
+    }
+
+    // users/{uid}/completedTasks/{id} … 完了済みタスクのスナップショット＋履歴用メタデータ。
+    // 中身はtasksとほぼ同じ形だが、過去に書き込まれたtasksの形が将来変わっても履歴として残せるよう、
+    // ここでは「履歴管理として新規に足したフィールド」だけを厳密にチェックする。
+    function isValidCompletedTaskWrite(data) {
+      return
+        (!('originalTaskId' in data) || data.originalTaskId is string) &&
+        (!('removedFromHistory' in data) || data.removedFromHistory is bool);
+    }
+
+    // users/{uid} 本体 … fcmToken・notificationSettings・labelNames・discoveredStatuses・
+    // ストリーク集計（streakCurrent/streakLongest/streakLastDate、taskService側のクライアントトランザクション）。
+    function isValidUserWrite(data) {
+      return
+        (!('fcmToken' in data) || data.fcmToken == null || data.fcmToken is string) &&
+        (!('labelNames' in data) || data.labelNames is map) &&
+        (!('notificationSettings' in data) || data.notificationSettings is map) &&
+        (!('discoveredStatuses' in data) || data.discoveredStatuses is list) &&
+        (!('streakCurrent' in data) || data.streakCurrent is number) &&
+        (!('streakLongest' in data) || data.streakLongest is number) &&
+        (!('streakLastDate' in data) || isDateStr(data.streakLastDate));
+    }
+
+    // users/{uid} 本体。fcmToken・notificationSettings・labelNames を保持する。
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid
+        && isValidUserWrite(request.resource.data);
+    }
+
+    // users/{uid}/tasks/{taskId} … 未完了タスク。
+    match /users/{uid}/tasks/{taskId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && isValidTaskWrite(request.resource.data);
+    }
+
+    // users/{uid}/completedTasks/{completedTaskId} … 完了済みタスク履歴。
+    match /users/{uid}/completedTasks/{completedTaskId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && isValidCompletedTaskWrite(request.resource.data);
+    }
+
+    // 上記2つ以外の users/{uid} 配下サブコレクションは現状存在しないため、意図的にここで拒否させている
+    // （最後の catch-all に落ちる）。新しいサブコレクションを追加する場合は、専用の match を追加し、
+    // その形式に合ったチェック関数も一緒に用意すること。汎用の {document=**} で受けてしまうと
+    // 上のtasks/completedTasksのデータ形式チェックがまとめて無効化される（Firestoreのルールは
+    // 一致した match すべての allow が OR で合成されるため）。
 
     // reminders はユーザーの配下ではなくフラットなコレクションのため、
     // ドキュメント自身の uid フィールドで所有者を判定する。
@@ -41,6 +107,7 @@ service cloud.firestore {
       // 自分のuidで reminders ドキュメントを作成しつつ fcmToken だけ他人のものを指定することで、
       // sendReminderNotifications（uidを見ずにfcmToken宛てへ送信する）経由で他人へ任意内容のプッシュ通知を
       // 送りつけられてしまう（taskId は攻撃者自身のtasksを参照するだけなので、この経路の悪用は防げない）。
+      // taskId/kind/notifiedの形式チェックも合わせて行い、壊れた形のリマインダーが作られるのを防ぐ。
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.uid
         && (
@@ -49,7 +116,10 @@ service cloud.firestore {
             exists(/databases/$(database)/documents/users/$(request.auth.uid))
             && request.resource.data.fcmToken == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.fcmToken
           )
-        );
+        )
+        && (!("taskId" in request.resource.data) || request.resource.data.taskId is string)
+        && (!("kind" in request.resource.data) || request.resource.data.kind in ["fixed", "batch", "daily"])
+        && (!("notified" in request.resource.data) || request.resource.data.notified == false);
 
       // 未通知リマインダーの取り消し(cancelPendingReminders / clearFixedReminders)用。
       allow delete: if request.auth != null && request.auth.uid == resource.data.uid;

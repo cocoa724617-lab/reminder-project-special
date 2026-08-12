@@ -63,6 +63,26 @@ describe("users/{uid}", () => {
     await assertFails(getDoc(doc(db, "users", BOB)));
     await assertFails(setDoc(doc(db, "users", BOB), { fcmToken: "hijacked" }, { merge: true }));
   });
+
+  it("fcmTokenが文字列/nullでなければ書き込めない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, "users", ALICE), { fcmToken: 12345 }, { merge: true }));
+    await assertSucceeds(setDoc(doc(db, "users", ALICE), { fcmToken: null }, { merge: true }));
+  });
+
+  it("notificationSettingsがmapでなければ書き込めない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, "users", ALICE), { notificationSettings: "invalid" }, { merge: true }));
+    await assertSucceeds(
+      setDoc(doc(db, "users", ALICE), { notificationSettings: { startTime: "09:00", endTime: "21:00" } }, { merge: true }),
+    );
+  });
+
+  it("streakLastDateがYYYY-MM-DD形式でなければ書き込めない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, "users", ALICE), { streakLastDate: "2026/08/12" }, { merge: true }));
+    await assertSucceeds(setDoc(doc(db, "users", ALICE), { streakLastDate: "2026-08-12", streakCurrent: 3 }, { merge: true }));
+  });
 });
 
 describe("users/{uid}/tasks/{taskId}", () => {
@@ -90,6 +110,40 @@ describe("users/{uid}/tasks/{taskId}", () => {
     const db = dbAs(ALICE);
     await assertFails(getDocs(collection(db, "users", BOB, "tasks")));
   });
+
+  it("name/titleのどちらも無いタスクは作成できない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, "users", ALICE, "tasks", "t1"), { status: "未完了" }));
+  });
+
+  it("statusが決められた値以外なら作成・更新できない", async () => {
+    const db = dbAs(ALICE);
+    const ref = doc(db, "users", ALICE, "tasks", "t1");
+    await assertFails(setDoc(ref, { title: "テスト", status: "完了" }));
+    await assertSucceeds(setDoc(ref, { title: "テスト", status: "未完了" }));
+    await assertFails(updateDoc(ref, { status: "done" }));
+  });
+
+  it("repeatが決められた値以外なら作成できない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, "users", ALICE, "tasks", "t1"), { title: "テスト", repeat: "everyday" }));
+    await assertSucceeds(setDoc(doc(db, "users", ALICE, "tasks", "t1"), { title: "テスト", repeat: "daily" }));
+  });
+
+  it("dueDateがYYYY-MM-DD形式（またはnull）でなければ作成できない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, "users", ALICE, "tasks", "t1"), { title: "テスト", dueDate: "2026/08/12" }));
+    await assertSucceeds(setDoc(doc(db, "users", ALICE, "tasks", "t1"), { title: "テスト", dueDate: "2026-08-12" }));
+    await assertSucceeds(setDoc(doc(db, "users", ALICE, "tasks", "t2"), { title: "テスト", dueDate: null }));
+  });
+
+  it("fixedRemindersが配列でなければ作成できない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, "users", ALICE, "tasks", "t1"), { title: "テスト", fixedReminders: "invalid" }));
+    await assertSucceeds(
+      setDoc(doc(db, "users", ALICE, "tasks", "t1"), { title: "テスト", fixedReminders: [{ unit: "hours", value: 1 }] }),
+    );
+  });
 });
 
 describe("users/{uid}/completedTasks/{completedTaskId}", () => {
@@ -108,6 +162,14 @@ describe("users/{uid}/completedTasks/{completedTaskId}", () => {
     await assertFails(getDoc(ref));
     await assertFails(deleteDoc(ref));
     await assertFails(setDoc(doc(db, "users", BOB, "completedTasks", "c2"), { title: "x" }));
+  });
+
+  it("removedFromHistoryが真偽値でなければ更新できない", async () => {
+    const db = dbAs(ALICE);
+    const ref = doc(db, "users", ALICE, "completedTasks", "c1");
+    await assertSucceeds(setDoc(ref, { title: "終わった", originalTaskId: "t1" }));
+    await assertFails(updateDoc(ref, { removedFromHistory: "yes" }));
+    await assertSucceeds(updateDoc(ref, { removedFromHistory: true }));
   });
 });
 
@@ -202,5 +264,21 @@ describe("reminders", () => {
     await seed((db) => setDoc(doc(db, "reminders", "r1"), { uid: ALICE, taskId: "t1", notified: false }));
     const db = dbAs(ALICE);
     await assertFails(updateDoc(doc(db, "reminders", "r1"), { notified: true }));
+  });
+
+  it("kindが決められた値以外なら作成できない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(addDoc(collection(db, "reminders"), { uid: ALICE, taskId: "t1", kind: "invalid", notified: false }));
+    await assertSucceeds(addDoc(collection(db, "reminders"), { uid: ALICE, taskId: "t1", kind: "fixed", notified: false }));
+  });
+
+  it("notified: trueで新規作成はできない（通知済みを最初から名乗れないように）", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(addDoc(collection(db, "reminders"), { uid: ALICE, taskId: "t1", notified: true }));
+  });
+
+  it("taskIdが文字列でなければ作成できない", async () => {
+    const db = dbAs(ALICE);
+    await assertFails(addDoc(collection(db, "reminders"), { uid: ALICE, taskId: 123, notified: false }));
   });
 });

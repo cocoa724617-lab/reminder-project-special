@@ -563,12 +563,16 @@ exports.sendReminderNotifications = onSchedule(
           // 手動表示と重複して二重通知になるため、dataのみで送りSW側の表示に一本化する。
           // taskIdを含めるのは、SW側で「完了」「1時間後」のクイックアクションボタンを出すため
           // （kind: "daily" のうっかり防止リマインダーはタスクに紐付かないため含めない）。
+          // reminderId（このremindersドキュメント自身のID）も併せて含める。
+          // quickCompleteTaskが「この通知からの完了操作は既に処理済みか」を判定するための
+          // 手がかりとして使う（二重タップ・SWからの再送で同じ完了が2回走るのを防ぐため）。
           const messagePayload = {
             title: notificationTitle,
             body: data.body || "リマインダーの時間です"
           };
           if (data.kind !== "daily" && data.taskId) {
             messagePayload.taskId = data.taskId;
+            messagePayload.reminderId = doc.id;
           }
 
           await admin.messaging().send({
@@ -675,51 +679,74 @@ async function cancelAllPendingRemindersForTask(uid, taskId) {
 }
 
 // 通知の「完了」ボタン用：taskService.js の completeTask と同じ処理（ストリーク更新も含む）。
+//
+// 二重完了防止について：
+// もともと `task.status === "完了"` を見るガードがあったが、実際には status に "完了" が
+// 書き込まれる経路が存在しない（繰り返しタスクは完了のたびに "未完了" へ戻すし、繰り返しでない
+// タスクは完了と同時にドキュメントごと削除される）ため、このガードは常に false で素通りしていた。
+// 結果、通知のアクションボタンの二度押しや、Service Workerからの呼び出しがネットワーク不調で
+// 再送された場合に、繰り返しタスクの dueDate が1サイクルではなく2サイクル分進んだり、
+// completedTasks に重複した履歴が残ったりしていた。
+//
+// 修正：呼び出し元（Service Worker）に、その完了操作の元になった通知（reminders ドキュメント）の
+// IDを reminderId として渡してもらい、「同じ reminderId で既に完了処理済みか」を判定する。
+// これなら dueDate が既に次のサイクルへ進んでいても、"あの通知はもう処理済み" と正しく判定できる
+// （dueDateだけを見る方法だと、進んだ後のdueDateが「たまたま今回のサイクルと一致するか」しか
+// 判断できず、二重タップと次サイクルの正常な完了を区別できない）。
+// また読み取り→判定→書き込みをトランザクションにすることで、ほぼ同時に2回呼ばれた場合も
+// 片方は書き込み衝突でリトライされ、リトライ後に再読込した最新状態（＝もう片方が書いた
+// lastActionedReminderId）を見て正しく「既に完了済み」と判定できるようにしている。
 exports.quickCompleteTask = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です");
 
   const uid = request.auth.uid;
   const taskId = request.data && request.data.taskId;
   if (!taskId) throw new HttpsError("invalid-argument", "taskIdが必要です");
+  // 古いService Worker（この修正より前にキャッシュされたもの）はreminderIdを渡してこない。
+  // その場合は二重完了ガードを判定できないので、これまで通りフェイルオープンにする。
+  const reminderId = (request.data && request.data.reminderId) || null;
 
   const taskRef = db.collection("users").doc(uid).collection("tasks").doc(taskId);
-  const taskSnap = await taskRef.get();
-  if (!taskSnap.exists) {
-    return { ok: false, reason: "already-gone" };
-  }
-
-  const task = taskSnap.data();
-  if (task.status === "完了") {
-    return { ok: false, reason: "already-completed" };
-  }
-
   const completedId = `${taskId}_${Date.now()}`;
   const completedAt = new Date();
-  await db
-    .collection("users")
-    .doc(uid)
-    .collection("completedTasks")
-    .doc(completedId)
-    .set({
+
+  const result = await db.runTransaction(async (transaction) => {
+    const taskSnap = await transaction.get(taskRef);
+    if (!taskSnap.exists) {
+      return { ok: false, reason: "already-gone" };
+    }
+
+    const task = taskSnap.data();
+    if (reminderId && task.lastActionedReminderId === reminderId) {
+      return { ok: false, reason: "already-completed" };
+    }
+
+    transaction.set(db.collection("users").doc(uid).collection("completedTasks").doc(completedId), {
       ...task,
       originalTaskId: taskId,
       deletedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-  const isRepeating = !!task.repeat && task.repeat !== "none";
-  if (isRepeating) {
-    await taskRef.update({
-      status: "未完了",
-      dueDate: computeNextDueDate(task.dueDate, task.repeat),
-      laterCount: 0,
-      lastPostponedAt: null,
-      laterTime: null,
-      lastCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-  } else {
-    await taskRef.delete();
-  }
+    const isRepeating = !!task.repeat && task.repeat !== "none";
+    if (isRepeating) {
+      transaction.update(taskRef, {
+        status: "未完了",
+        dueDate: computeNextDueDate(task.dueDate, task.repeat),
+        laterCount: 0,
+        lastPostponedAt: null,
+        laterTime: null,
+        lastCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastActionedReminderId: reminderId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } else {
+      transaction.delete(taskRef);
+    }
+
+    return { ok: true };
+  });
+
+  if (!result.ok) return result;
 
   await cancelAllPendingRemindersForTask(uid, taskId);
   await updateStreakOnCompletion(uid, completedAt);
