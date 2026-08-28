@@ -48,6 +48,8 @@ export interface Task {
   frequency?: NotificationVolume;
   frequencyUnit?: "day" | "week";
   frequencyCount?: number;
+  randomFrequencyUnit?: "day" | "week"; // frequencyUnitの旧フィールド名（読み取り専用フォールバック）
+  randomFrequencyCount?: number; // frequencyCountの旧フィールド名（読み取り専用フォールバック）
   fixedReminders?: FixedReminder[];
   laterCount?: number;
   laterTime?: string | null;

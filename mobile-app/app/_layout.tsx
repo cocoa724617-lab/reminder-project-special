@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
@@ -25,7 +26,11 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!!currentUser}>
-        <Stack.Screen name="index" />
+        <Stack.Screen name="(tabs)" />
+        {/* タスク登録・編集はFAB(＋ボタン)からモーダルで開く。フォーム自体が保存/キャンセル/削除
+            ボタンを持つため、ネイティブヘッダーの戻るボタンは出さない（headerShown: false）。 */}
+        <Stack.Screen name="task/new" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="task/[id]" options={{ presentation: 'modal', headerShown: false }} />
       </Stack.Protected>
 
       <Stack.Protected guard={!currentUser}>
@@ -39,11 +44,15 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <RootNavigator />
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AuthProvider>
+    // components/frequency-slider.tsx がreact-native-gesture-handlerのPanジェスチャーを使うため、
+    // ライブラリの要件通りアプリ全体をGestureHandlerRootViewで包む。
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <RootNavigator />
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

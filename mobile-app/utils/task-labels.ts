@@ -93,3 +93,41 @@ export function normalizeLabelNames(labelNamesForm: LabelNames): Record<string, 
   });
   return normalized;
 }
+
+// 既存 index.html / task-list.html の getTaskTitle と同じ実装。
+// Web版ではHomePage.jsxとTaskCard.jsxに全く同じ内容が重複していたため、Phase2移植時にここへ集約した。
+export function getTaskTitle(task: Task, fallback: string): string {
+  return task.title || task.name || fallback;
+}
+
+// 既存 index.html の getTaskDueDate と同じ実装（dueDateが無い場合は旧フィールドdateにフォールバック）。
+export function getTaskDueDate(task: Task): string {
+  return task.dueDate || task.date || "";
+}
+
+const FREQUENCY_VOLUME_LABELS: Partial<Record<NonNullable<Task["frequency"]>, string>> = {
+  small: "少なめ（1〜2回/日）",
+  medium: "普通（3〜4回/日）",
+  large: "多め（5〜7回/日）",
+};
+
+// 既存 index.html / task-list.html の getReminderLabel と同じ実装（HomePage.jsx/TaskCard.jsxで重複していたものを集約）。
+// notifyDate/time は非常に古い形式のタスクにだけ残っている絶対日時表示、dueDate/dateは期限、
+// frequencyはランダム通知の頻度（新しい回数指定 or 旧small/medium/large）を表す。
+export function getReminderLabel(task: Task): string {
+  if (task.notifyDate) {
+    return `通知日時：${task.notifyDate}${task.time ? " " + task.time : ""}`;
+  }
+  if (task.frequency && task.frequency !== "none") {
+    if (task.frequencyCount) {
+      const unitLabel = task.frequencyUnit === "week" ? "1週間" : "1日";
+      return `${unitLabel}に${task.frequencyCount}回くらいランダム通知`;
+    }
+    const freqLabel = FREQUENCY_VOLUME_LABELS[task.frequency] || task.frequency;
+    return `ランダム通知・${freqLabel}`;
+  }
+  if (task.dueDate || task.date) {
+    return `期限：${task.dueDate || task.date}${task.dueTime ? " " + task.dueTime : ""}`;
+  }
+  return "日時未設定";
+}
