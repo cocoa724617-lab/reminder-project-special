@@ -39,3 +39,12 @@ export function computeCompletionStats(completedTasks: CompletedTask[] | null | 
 
   return { todayCount, weekCount, fromLaterCount, bestWeekdays };
 }
+
+// 既存 react-app/src/pages/StatsPage.jsx と HomePage.jsx で全く同じ内容が重複していた
+// formatPercentText をここへ集約（Phase3で app/stats.tsx を作る際に見つけた重複）。
+// 0〜1の比率を「NN%」表示に丸める。null/undefinedは「集計対象なし」等のプレースホルダーにフォールバックする。
+export function formatPercentText(value: number | null | undefined, emptyText = "集計対象なし"): string {
+  if (value === null || value === undefined) return emptyText;
+  const percent = Math.max(0, Math.min(100, Math.round(Number(value) * 100)));
+  return Number.isFinite(percent) ? `${percent}%` : emptyText;
+}

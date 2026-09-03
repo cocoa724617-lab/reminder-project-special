@@ -1,14 +1,19 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import EmptyState from '@/components/empty-state';
 import MetaPillRow from '@/components/meta-pill-row';
-import { useLabelNames, useTasks } from '@/hooks/use-tasks';
+import { STATUS_IMAGES } from '@/constants/status-images';
+import { useDiscoveredStatuses, useLabelNames, useRecentCompletedTasks, useStreak, useTasks } from '@/hooks/use-tasks';
+import { celebrateCompletion, celebrateStatusDiscovery } from '@/utils/celebrate';
 import { toDateKey } from '@/utils/date-utils';
+import { computeCompletionStats, formatPercentText } from '@/utils/stats-utils';
 import { getReminderLabel, getTaskDueDate, getTaskTitle, getRepeatCycleStatus, normalizeImportance } from '@/utils/task-labels';
-import type { Task, TaskPriority } from '@/types/task';
+import { computeUserStatusStats, computeWeeklyProgress, getStatusDiscoveryStats, getUserStatusesFromStats } from '@/utils/user-status-utils';
+import type { CompletedTask, Task, TaskPriority } from '@/types/task';
+import type { StatusKey } from '@/utils/user-status-utils';
 
 function normalizeDateValue(value: string): string {
   return value ? value.slice(0, 10) : '';
@@ -45,23 +50,74 @@ function pickNextTask(activeTasks: Task[], todayStr: string): Task | null {
   );
 }
 
-// 既存 react-app/src/pages/HomePage.jsx のExpo版。
-// Phase2ではスコープを絞り、「次にやるタスク」「今日やるべきタスク」「＋追加FAB」のみ実装する。
-// ステータス表示・週間進捗・統計タイル・ステータス発見度・連続記録バナーはPhase3で追加する
-// （元のロードマップ通り、こうした「既存独自機能」はPhase3の担当）。
-// 「あとでやる」ボタンもPhase3実装までは出さない（後述のTaskListPage同様、遷移先がまだ無いため）。
+function formatBestWeekdays(bestWeekdays: string[] | undefined): string {
+  if (!bestWeekdays || bestWeekdays.length === 0) return 'まだ集計中';
+  return bestWeekdays.map((day) => `${day}曜日`).join(' / ');
+}
+
+function getUserStatusMessage(stats: { todayCompletedCount: number; postponedCompletedCount: number }): string {
+  if (stats.todayCompletedCount === 0) {
+    return '今日はまだ完了タスクがありません。まずは1つ進めてみましょう。';
+  }
+  if (stats.postponedCompletedCount > 0) {
+    return 'あとでにしたタスクも、最終的に完了できています。';
+  }
+  return '少しずつ進めていきましょう。';
+}
+
+// 既存 react-app/src/pages/HomePage.jsx のExpo版（Phase3でPhase2が見送った残りのセクションを復元）。
+// useNow()は使わず、repeat-cycle判定用のnowは毎回のレンダー時にnew Date()で計算する
+// （tasks.tsx/later.tsxと同じ理由：フォーカス時のrefetchで十分）。
 export default function HomeScreen() {
-  const { tasks, isLoading, error, completeTask, refetch } = useTasks();
-  const labelNames = useLabelNames();
+  const { tasks, isLoading: tasksLoading, error: tasksError, completeTask, refetch } = useTasks();
+  const {
+    completedTasks: recentCompletedFromServer,
+    isLoading: completedLoading,
+    refetch: refetchRecentCompleted,
+  } = useRecentCompletedTasks();
+  const { labelNames, refetch: refetchLabelNames } = useLabelNames();
+  const {
+    discoveredKeys,
+    isLoaded: discoveredStatusesLoaded,
+    recordDiscoveries,
+    newlyDiscovered,
+    clearNewlyDiscovered,
+  } = useDiscoveredStatuses();
+  const { streak, applyStreak } = useStreak();
   const router = useRouter();
+
+  // タスク完了直後は再取得を待たず、その場ですぐ集計へ反映するための楽観的な追加分。
+  const [optimisticCompletions, setOptimisticCompletions] = useState<CompletedTask[]>([]);
+  const recentCompleted = useMemo(
+    () => [...optimisticCompletions, ...recentCompletedFromServer],
+    [optimisticCompletions, recentCompletedFromServer],
+  );
 
   useFocusEffect(
     useCallback(() => {
       refetch();
-    }, [refetch]),
+      refetchRecentCompleted();
+      refetchLabelNames();
+    }, [refetch, refetchRecentCompleted, refetchLabelNames]),
   );
 
-  if (isLoading) {
+  // ステータス発見度の蓄積：読み込み完了後、今まさに該当しているステータスを発見済み一覧へマージする。
+  // データ未取得のまま集計すると「タスクなし」判定でバカンス中を誤発見してしまうため、読み込み中は行わない。
+  useEffect(() => {
+    if (tasksLoading || completedLoading || !discoveredStatusesLoaded) return;
+    const stats = computeUserStatusStats(tasks, recentCompleted);
+    const statuses = getUserStatusesFromStats(stats);
+    if (statuses.length > 0) recordDiscoveries(statuses);
+  }, [tasksLoading, completedLoading, discoveredStatusesLoaded, tasks, recentCompleted, recordDiscoveries]);
+
+  // 新規発見があった瞬間だけトースト演出を出す。表示後は自身でキューを空にする。
+  useEffect(() => {
+    if (newlyDiscovered.length === 0) return;
+    newlyDiscovered.forEach((status) => celebrateStatusDiscovery(status));
+    clearNewlyDiscovered();
+  }, [newlyDiscovered, clearNewlyDiscovered]);
+
+  if (tasksLoading || completedLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
@@ -69,7 +125,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (error) {
+  if (tasksError) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>タスクの取得に失敗しました。時間をおいて再度お試しください。</Text>
@@ -79,11 +135,22 @@ export default function HomeScreen() {
 
   async function handleComplete(task: Task) {
     try {
-      await completeTask(task);
+      const { completedEntry, streak: nextStreak } = await completeTask(task);
+      celebrateCompletion();
+      if (completedEntry) {
+        setOptimisticCompletions((prev) => [completedEntry, ...prev]);
+      }
+      if (nextStreak) {
+        applyStreak(nextStreak);
+      }
     } catch (err) {
       console.error('タスクの完了に失敗しました:', err);
       Alert.alert('タスクの完了に失敗しました。時間をおいて再度お試しください。');
     }
+  }
+
+  function handlePostpone(task: Task) {
+    router.push({ pathname: '/postpone/[id]', params: { id: task.id } });
   }
 
   const now = new Date();
@@ -95,6 +162,18 @@ export default function HomeScreen() {
   const nextTask = pickNextTask(activeTasks, todayStr);
   const todaysActive = activeTasks.filter((task) => isTodayTask(task, todayStr)).filter((task) => !nextTask || task.id !== nextTask.id);
 
+  const completionStats = computeCompletionStats(recentCompleted);
+  // バッジ判定用：直近7日の移動窓（月曜になっても急にリセットされない）。
+  const userStatusStats = computeUserStatusStats(tasks, recentCompleted);
+  const currentStatuses = getUserStatusesFromStats(userStatusStats);
+  // 「今週の進み具合」カード表示用：月曜0時起点の暦週で、実際に毎週リセットされる。
+  const weeklyProgress = computeWeeklyProgress(tasks, recentCompleted);
+  const completionRateText =
+    weeklyProgress.completionTargetCount > 0 ? formatPercentText(weeklyProgress.completionRate) : '集計対象なし';
+  const postponeRateText = formatPercentText(weeklyProgress.postponeRate, '0%');
+  const discoveryStats = getStatusDiscoveryStats(discoveredKeys);
+  const discoveryPercent = Math.round((discoveryStats.discoveredCount / discoveryStats.totalCount) * 100);
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -103,6 +182,41 @@ export default function HomeScreen() {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View>
+            <View style={styles.streakBanner}>
+              {streak.current > 0 ? (
+                <>
+                  <Text style={styles.streakEmoji}>🔥</Text>
+                  <Text style={styles.streakText}>
+                    <Text style={styles.streakBold}>{streak.current}日連続</Text>で達成中
+                  </Text>
+                  {streak.longest > streak.current && (
+                    <Text style={styles.streakBest}>最長{streak.longest}日</Text>
+                  )}
+                </>
+              ) : (
+                <Text style={styles.streakText}>今日タスクを1つ完了して、連続達成を始めよう</Text>
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>あなたの現在のステータス</Text>
+              {currentStatuses.length === 0 ? (
+                <Text style={styles.mutedText}>ステータスはまだ集計中です。少しずつタスクを進めていきましょう。</Text>
+              ) : (
+                <View style={styles.statusList}>
+                  {currentStatuses.map((status) => (
+                    <View style={styles.statusCard} key={status.key}>
+                      <Image source={STATUS_IMAGES[status.key]} style={styles.statusImage} />
+                      <View style={styles.statusBody}>
+                        <Text style={styles.statusName}>{status.name}</Text>
+                        <Text style={styles.statusDescription}>{status.description}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
             {nextTask && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>次にやるタスク</Text>
@@ -110,12 +224,18 @@ export default function HomeScreen() {
                   <Text style={styles.nextTaskTitle}>{getTaskTitle(nextTask, '無題のタスク')}</Text>
                   <Text style={styles.remindText}>📅 {getReminderLabel(nextTask)}</Text>
                   <MetaPillRow task={nextTask} labelNames={labelNames} />
-                  <Pressable style={styles.completeButton} onPress={() => handleComplete(nextTask)}>
-                    <Text style={styles.completeButtonText}>完了</Text>
-                  </Pressable>
+                  <View style={styles.nextTaskActions}>
+                    <Pressable style={styles.completeButton} onPress={() => handleComplete(nextTask)}>
+                      <Text style={styles.completeButtonText}>完了</Text>
+                    </Pressable>
+                    <Pressable style={styles.postponeButton} onPress={() => handlePostpone(nextTask)}>
+                      <Text style={styles.postponeButtonText}>あとでやる</Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
             )}
+
             <Text style={styles.sectionTitle}>今日やるべきタスク</Text>
           </View>
         }
@@ -132,8 +252,96 @@ export default function HomeScreen() {
               <Text style={styles.remindText}>📅 {getReminderLabel(item)}</Text>
               <MetaPillRow task={item} labelNames={labelNames} />
             </View>
+            <Pressable onPress={() => handlePostpone(item)} hitSlop={8}>
+              <Text style={styles.laterLink}>あとで</Text>
+            </Pressable>
           </View>
         )}
+        ListFooterComponent={
+          <View>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>今週の進み具合</Text>
+              <View style={styles.card}>
+                <View style={styles.weeklyGrid}>
+                  <View style={styles.weeklyItem}>
+                    <Text style={styles.weeklyValue}>{weeklyProgress.todayCompletedCount}</Text>
+                    <Text style={styles.weeklyLabel}>今日の完了</Text>
+                  </View>
+                  <View style={styles.weeklyItem}>
+                    <Text style={styles.weeklyValue}>{weeklyProgress.weeklyCompletedCount}</Text>
+                    <Text style={styles.weeklyLabel}>今週の完了</Text>
+                  </View>
+                  <View style={styles.weeklyItem}>
+                    <Text style={styles.weeklyValue}>{weeklyProgress.postponedCompletedCount}</Text>
+                    <Text style={styles.weeklyLabel}>あとでから完了</Text>
+                  </View>
+                  <View style={[styles.weeklyItem, styles.weeklyItemWide]}>
+                    <Text style={styles.weeklyLabel}>よくできた曜日</Text>
+                    <Text style={styles.weeklyText}>{formatBestWeekdays(weeklyProgress.bestWeekdays)}</Text>
+                  </View>
+                  <View style={styles.weeklyItem}>
+                    <Text style={styles.weeklyValue}>{completionRateText}</Text>
+                    <Text style={styles.weeklyLabel}>達成率</Text>
+                  </View>
+                  <View style={styles.weeklyItem}>
+                    <Text style={styles.weeklyValue}>{postponeRateText}</Text>
+                    <Text style={styles.weeklyLabel}>後でやる使用率</Text>
+                  </View>
+                </View>
+                <Text style={styles.weeklyMessage}>{getUserStatusMessage(weeklyProgress)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>成果の確認</Text>
+              <View style={styles.tileGrid}>
+                <View style={styles.tile}>
+                  <Text style={styles.tileValue}>{completionStats.todayCount}</Text>
+                  <Text style={styles.tileLabel}>今日の完了</Text>
+                </View>
+                <View style={styles.tile}>
+                  <Text style={styles.tileValue}>{completionStats.weekCount}</Text>
+                  <Text style={styles.tileLabel}>今週の完了</Text>
+                </View>
+                <View style={[styles.tile, styles.tileAccent]}>
+                  <Text style={[styles.tileValue, styles.tileValueAccent]}>{completionStats.fromLaterCount}</Text>
+                  <Text style={styles.tileLabel}>あとでから完了</Text>
+                </View>
+              </View>
+              <Pressable onPress={() => router.push('/stats')}>
+                <Text style={styles.statsLink}>実績をもっと見る ›</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>ステータス発見度</Text>
+              <View style={styles.card}>
+                <Text style={styles.discoveryCount}>
+                  {discoveryStats.discoveredCount} / {discoveryStats.totalCount} 種類発見
+                </Text>
+                <View style={styles.discoveryBarTrack}>
+                  <View style={[styles.discoveryBarFill, { width: `${discoveryPercent}%` }]} />
+                </View>
+                <View style={styles.discoveryGrid}>
+                  {discoveryStats.statuses.map((status) => (
+                    <View key={status.key} style={styles.discoveryTile}>
+                      {status.discovered ? (
+                        <Image source={STATUS_IMAGES[status.key as StatusKey]} style={styles.discoveryImage} />
+                      ) : (
+                        <View style={styles.discoveryPlaceholder}>
+                          <Text style={styles.discoveryPlaceholderText}>？</Text>
+                        </View>
+                      )}
+                      <Text style={styles.discoveryName} numberOfLines={1}>
+                        {status.discovered ? status.name : '未発見'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </View>
+        }
       />
 
       <Pressable style={styles.fab} onPress={() => router.push('/task/new')}>
@@ -150,6 +358,30 @@ const styles = StyleSheet.create({
   listContent: { padding: 16, paddingBottom: 96 },
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1c1c1e', marginBottom: 10 },
+  mutedText: { fontSize: 13, color: '#8e8e93' },
+  card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, gap: 12 },
+
+  streakBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff4e5',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+  streakEmoji: { fontSize: 20 },
+  streakText: { fontSize: 14, color: '#1c1c1e', flexShrink: 1 },
+  streakBold: { fontWeight: '700' },
+  streakBest: { fontSize: 12, color: '#8e8e93', marginLeft: 'auto' },
+
+  statusList: { gap: 10 },
+  statusCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 12, padding: 12 },
+  statusImage: { width: 52, height: 52, borderRadius: 26 },
+  statusBody: { flex: 1, gap: 2 },
+  statusName: { fontSize: 15, fontWeight: '700', color: '#1c1c1e' },
+  statusDescription: { fontSize: 12, color: '#6b6b70' },
+
   nextTaskCard: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -163,16 +395,15 @@ const styles = StyleSheet.create({
   },
   nextTaskTitle: { fontSize: 18, fontWeight: '700', color: '#1c1c1e' },
   remindText: { fontSize: 13, color: '#6b6b70' },
-  completeButton: {
-    marginTop: 8,
-    backgroundColor: '#0a84ff',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
+  nextTaskActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  completeButton: { flex: 1, backgroundColor: '#0a84ff', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   completeButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  postponeButton: { flex: 1, backgroundColor: '#f1e8d9', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  postponeButtonText: { color: '#6b6b70', fontSize: 15, fontWeight: '600' },
+
   todayCard: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 10,
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -189,6 +420,41 @@ const styles = StyleSheet.create({
   },
   todayCardInfo: { flex: 1, gap: 4 },
   todayCardTitle: { fontSize: 15, fontWeight: '600', color: '#1c1c1e' },
+  laterLink: { fontSize: 13, color: '#0a84ff', marginTop: 4 },
+
+  weeklyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  weeklyItem: { width: '28%', gap: 2 },
+  weeklyItemWide: { width: '100%' },
+  weeklyValue: { fontSize: 20, fontWeight: '700', color: '#1c1c1e' },
+  weeklyLabel: { fontSize: 11, color: '#8e8e93' },
+  weeklyText: { fontSize: 14, color: '#1c1c1e', fontWeight: '600' },
+  weeklyMessage: { fontSize: 13, color: '#6b6b70' },
+
+  tileGrid: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  tile: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 14, alignItems: 'center', gap: 4 },
+  tileAccent: { backgroundColor: '#eafaf0' },
+  tileValue: { fontSize: 22, fontWeight: '700', color: '#1c1c1e' },
+  tileValueAccent: { color: '#248a3d' },
+  tileLabel: { fontSize: 12, color: '#6b6b70' },
+  statsLink: { fontSize: 14, color: '#0a84ff', fontWeight: '600' },
+
+  discoveryCount: { fontSize: 15, fontWeight: '700', color: '#1c1c1e' },
+  discoveryBarTrack: { height: 8, borderRadius: 4, backgroundColor: '#e5e5ea', overflow: 'hidden' },
+  discoveryBarFill: { height: '100%', backgroundColor: '#0a84ff' },
+  discoveryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between' },
+  discoveryTile: { width: '22%', alignItems: 'center', gap: 4 },
+  discoveryImage: { width: 48, height: 48, borderRadius: 24 },
+  discoveryPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#f2f2f7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discoveryPlaceholderText: { fontSize: 18, color: '#c7c7cc' },
+  discoveryName: { fontSize: 10, color: '#6b6b70', textAlign: 'center' },
+
   fab: {
     position: 'absolute',
     right: 20,

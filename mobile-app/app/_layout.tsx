@@ -5,6 +5,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
+import CelebrationToast from '@/components/celebration-toast';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -31,6 +32,12 @@ function RootNavigator() {
             ボタンを持つため、ネイティブヘッダーの戻るボタンは出さない（headerShown: false）。 */}
         <Stack.Screen name="task/new" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="task/[id]" options={{ presentation: 'modal', headerShown: false }} />
+        {/* 後でやる時刻選択も同じくモーダル。画面自体に「キャンセルして一覧へ戻る」があるためヘッダーは出さない。 */}
+        <Stack.Screen name="postpone/[id]" options={{ presentation: 'modal', headerShown: false }} />
+        {/* 完了済みタスク・実績は設定タブからの導線で開く読み取り中心の画面のため、モーダルではなく
+            ネイティブヘッダー＋戻るジェスチャーの通常push画面にする。 */}
+        <Stack.Screen name="completed" options={{ headerShown: true, title: '完了済みタスク' }} />
+        <Stack.Screen name="stats" options={{ headerShown: true, title: '実績' }} />
       </Stack.Protected>
 
       <Stack.Protected guard={!currentUser}>
@@ -51,6 +58,8 @@ export default function RootLayout() {
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <RootNavigator />
           <StatusBar style="auto" />
+          {/* utils/celebrate.ts のイベントを購読するグローバルなトースト。画面をまたいで1つだけ表示する。 */}
+          <CelebrationToast />
         </ThemeProvider>
       </AuthProvider>
     </GestureHandlerRootView>

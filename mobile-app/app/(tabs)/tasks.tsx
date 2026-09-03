@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import EmptyState from '@/components/empty-state';
 import TaskCard from '@/components/task-card';
 import { useLabelNames, useRecentCompletedTasks, useTasks } from '@/hooks/use-tasks';
+import { celebrateCompletion } from '@/utils/celebrate';
 import { getRepeatCycleStatus } from '@/utils/task-labels';
 import type { CompletedTask, Task } from '@/types/task';
 
@@ -24,28 +25,30 @@ function sortTasks(tasks: Task[]): Task[] {
 // - useNow()は使わず、repeat-cycle判定用の now は毎回のレンダー時に new Date() で計算する
 //   （Firestore取得はgetDocsで都度取得のため、リアルタイムに時計を刻んで再判定させる必要がない。
 //   タブに戻ってきた時点のrefetchで十分）。
-// - 「あとでやる」ボタンはPhase3実装まで出さない（TaskCardへonPostponeを渡さないだけで自動的に非表示）。
 // - 削除は確認ダイアログなしで即実行（Web版の実際の挙動と同じ。コメント上は「確認済み」とあるが
 //   実装にwindow.confirmが無く、コメントと実装が食い違っていたため実装の方に合わせている）。
 export default function TaskListScreen() {
   const { tasks, isLoading, error, completeTask, removeTask, refetch } = useTasks();
-  const labelNames = useLabelNames();
+  const { labelNames, refetch: refetchLabelNames } = useLabelNames();
   const router = useRouter();
   const {
     completedTasks: completedFromServer,
     isLoading: completedLoading,
     removeCompletedTask,
+    refetch: refetchRecentCompleted,
   } = useRecentCompletedTasks(14);
   // 通常タスクを完了した直後、再取得を待たずその場で完了済みセクションへ反映するための楽観的な追加分
   // （繰り返しタスクはtasks一覧側がそのまま更新されるのでここには積まない）。
   const [optimisticCompletions, setOptimisticCompletions] = useState<CompletedTask[]>([]);
   const completedTasks = [...optimisticCompletions, ...completedFromServer];
 
-  // タスク登録・編集画面（モーダル）から戻ってきたときに一覧を最新化する。
+  // タスク登録・編集画面（モーダル）や設定タブでのラベル名変更から戻ってきたときに一覧を最新化する。
   useFocusEffect(
     useCallback(() => {
       refetch();
-    }, [refetch]),
+      refetchRecentCompleted();
+      refetchLabelNames();
+    }, [refetch, refetchRecentCompleted, refetchLabelNames]),
   );
 
   if (isLoading || completedLoading) {
@@ -67,6 +70,7 @@ export default function TaskListScreen() {
   async function handleComplete(task: Task) {
     try {
       const { completedEntry } = await completeTask(task);
+      celebrateCompletion();
       if (completedEntry) {
         setOptimisticCompletions((prev) => [completedEntry, ...prev]);
       }
@@ -97,6 +101,10 @@ export default function TaskListScreen() {
 
   function handleEdit(task: Task) {
     router.push({ pathname: '/task/[id]', params: { id: task.id } });
+  }
+
+  function handlePostpone(task: Task) {
+    router.push({ pathname: '/postpone/[id]', params: { id: task.id } });
   }
 
   const now = new Date();
@@ -135,6 +143,7 @@ export default function TaskListScreen() {
               onComplete={handleComplete}
               onDelete={handleDelete}
               onEdit={handleEdit}
+              onPostpone={handlePostpone}
             />
           ))
         )}
@@ -152,6 +161,7 @@ export default function TaskListScreen() {
                 onComplete={handleComplete}
                 onDelete={handleDelete}
                 onEdit={handleEdit}
+                onPostpone={handlePostpone}
               />
             ))}
             {standaloneCompletedEntries.map((entry) => (

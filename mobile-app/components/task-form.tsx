@@ -14,6 +14,7 @@ import {
 
 import CalendarDatePicker from "@/components/calendar-date-picker";
 import FrequencySlider from "@/components/frequency-slider";
+import SegmentedControl from "@/components/segmented-control";
 import TimeSelect from "@/components/time-select";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useAuth } from "@/contexts/auth-context";
@@ -121,34 +122,6 @@ function buildFormFromTask(existingTask: Task): TaskFormState {
   };
 }
 
-// 重要度・優先度・繰り返し頻度の3箇所で使う、iOSのセグメントコントロール相当のピル行。
-// Web版では<select>だったが、常に全選択肢が見えているRN向けの方が自然なので、この形にした。
-function SegmentedControl<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <View style={styles.segmentedRow}>
-      {options.map((option) => {
-        const isSelected = option.value === value;
-        return (
-          <Pressable
-            key={option.value}
-            onPress={() => onChange(option.value)}
-            style={[styles.segment, isSelected && styles.segmentSelected]}>
-            <Text style={[styles.segmentText, isSelected && styles.segmentTextSelected]}>{option.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
   { value: "low", label: "低" },
   { value: "medium", label: "中" },
@@ -172,7 +145,7 @@ export default function TaskForm({ editId }: { editId?: string }) {
   const router = useRouter();
   const { currentUser } = useAuth();
   const { task: existingTask, isLoading, error } = useTask(editId);
-  const labelNames = useLabelNames();
+  const { labelNames } = useLabelNames();
 
   const [form, setForm] = useState<TaskFormState>(emptyFormState);
   const [isSaving, setIsSaving] = useState(false);
@@ -495,11 +468,6 @@ const styles = StyleSheet.create({
     minHeight: 72,
     textAlignVertical: "top",
   },
-  segmentedRow: { flexDirection: "row", backgroundColor: "#f2f2f7", borderRadius: 10, padding: 3, gap: 3 },
-  segment: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center" },
-  segmentSelected: { backgroundColor: "#fff", shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
-  segmentText: { fontSize: 13, color: "#6b6b70" },
-  segmentTextSelected: { color: "#1c1c1e", fontWeight: "700" },
   dueDateRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 16 },
   dueDateSideButton: { padding: 8 },
   dueDateSideButtonText: { fontSize: 20, color: "#0a84ff" },

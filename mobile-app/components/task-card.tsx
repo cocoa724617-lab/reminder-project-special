@@ -7,7 +7,7 @@ import { formatDate, formatDateTimeJa } from "@/utils/date-utils";
 import { getReminderLabel, getTaskLabel, getTaskTitle, type RepeatCycleStatus } from "@/utils/task-labels";
 import type { CompletedTask, LabelNames, Task } from "@/types/task";
 
-type TaskCardVariant = "active" | "completed";
+type TaskCardVariant = "active" | "completed" | "postponed";
 
 interface TaskCardProps {
   task: Task | CompletedTask;
@@ -109,6 +109,9 @@ export default function TaskCard({
 
   const later = String(task.status || "").trim() === "後でやる";
   const memo = task.memo || task.description || "";
+  // 既存 atodeyaru.html 一覧モードのカードを拡張したもの：元の期限・あとでやるにした時間・
+  // 後回し回数・最後に後回しにした日を追加表示する。アクションはactiveと同じ完了/あとでやる/編集/削除。
+  const isPostponed = variant === "postponed";
 
   const detailsToggle = (
     <Pressable onPress={() => setIsExpanded((prev) => !prev)} style={styles.detailsToggle}>
@@ -132,16 +135,24 @@ export default function TaskCard({
             <Text style={styles.title}>{getTaskTitle(task, "(無題)")}</Text>
           </View>
 
-          <Text style={styles.remindText}>📅 {getReminderLabel(task)}</Text>
-
-          {cycleStatus ? (
-            <View style={[styles.statusPill, styles.statusPillCycle]}>
-              <Text style={styles.statusPillText}>次回：{formatDateTimeJa(cycleStatus.nextDueDate)}</Text>
-            </View>
+          {isPostponed ? (
+            <Text style={styles.remindText}>
+              📅 元の期限：{task.dueDate || task.date || "未設定"}
+              {task.dueTime ? ` ${task.dueTime}` : ""}
+            </Text>
           ) : (
-            <View style={[styles.statusPill, later ? styles.statusPillLater : styles.statusPillPending]}>
-              <Text style={styles.statusPillText}>{later ? "後でやる" : "未完了"}</Text>
-            </View>
+            <>
+              <Text style={styles.remindText}>📅 {getReminderLabel(task)}</Text>
+              {cycleStatus ? (
+                <View style={[styles.statusPill, styles.statusPillCycle]}>
+                  <Text style={styles.statusPillText}>次回：{formatDateTimeJa(cycleStatus.nextDueDate)}</Text>
+                </View>
+              ) : (
+                <View style={[styles.statusPill, later ? styles.statusPillLater : styles.statusPillPending]}>
+                  <Text style={styles.statusPillText}>{later ? "後でやる" : "未完了"}</Text>
+                </View>
+              )}
+            </>
           )}
 
           {detailsToggle}
@@ -149,6 +160,15 @@ export default function TaskCard({
             <View style={styles.detailsPanel}>
               <MetaPillRow task={task as Task} labelNames={labelNames} />
               <Text style={styles.memoText}>メモ：{memo || "なし"}</Text>
+              {isPostponed && (
+                <>
+                  <Text style={styles.memoText}>あとでやるにした時間：{task.laterTime || "未設定"}</Text>
+                  <Text style={styles.memoText}>後回しにした回数：{task.laterCount || 0}回</Text>
+                  <Text style={styles.memoText}>
+                    最後に後回しにした日：{formatDate(task.lastPostponedAt, "記録なし")}
+                  </Text>
+                </>
+              )}
             </View>
           )}
         </View>
