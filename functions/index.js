@@ -271,6 +271,29 @@ function computeDueDateTime(task) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+// 通知本文に差し込む「期限：〜」表示用テキストを作る。dueDate（既存タスクではdate）を
+// 持たないタスク（頻度指定のみのタスクなど、特定の期限を持たないもの）はnullを返す。
+// クライアント側 getReminderLabel の「期限：」表示と同じ dueDate||date のフォールバックに揃えている。
+function formatDeadlineJa(dueDateStr, dueTimeStr) {
+  const dateMatch = String(dueDateStr || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateMatch) return null;
+  const [, y, m, d] = dateMatch;
+  const datePart = `${y}年${Number(m)}月${Number(d)}日`;
+
+  const timeMatch = String(dueTimeStr || "").match(/^(\d{1,2}):(\d{1,2})$/);
+  if (!timeMatch) return datePart;
+  return `${datePart} ${timeMatch[1].padStart(2, "0")}:${timeMatch[2].padStart(2, "0")}`;
+}
+
+// 上と同じ入力から、通知の timestamp（対応ブラウザ/OSではタイトル横の時刻表示に使われる）用のDateを作る。
+// 時刻未設定のタスクは0:00とみなす（日付だけでも「その日が期限」であることは示せるため）。
+function computeDeadlineDate(dueDateStr, dueTimeStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDateStr || ""))) return null;
+  const timePart = /^\d{1,2}:\d{1,2}$/.test(String(dueTimeStr || "")) ? dueTimeStr : "00:00";
+  const date = new Date(`${dueDateStr}T${timePart}:00+09:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 // 期限から各オフセット分だけ遡った通知時刻を計算する。計算結果が既に過去のものはスキップする
 // （期限まで3日しかないのに「1週間前」を選んだ場合など、保存直後に即時通知が飛ぶのを防ぐ）。
 // 除外時間帯(「通知を辞めてほしい時間」)にかぶる場合は、その除外時間帯が終わる時刻までずらす。
@@ -541,6 +564,10 @@ exports.sendReminderNotifications = onSchedule(
     const promises = snapshot.docs.map(async (doc) => {
       const data = doc.data();
       let notificationTitle = data.title || "リマインダー";
+      // 期限（dueDate/dueTime）はタスクに紐付く通知(kind !== "daily")だけが対象。
+      // うっかり防止リマインダーはタスクを持たないため常にnullのまま。
+      let deadlineText = null;
+      let deadlineDate = null;
 
       // うっかり防止リマインダー(kind: "daily")はタスクに紐付かないため、タスクの存在・完了チェックは行わない。
       if (data.kind !== "daily") {
@@ -555,6 +582,9 @@ exports.sendReminderNotifications = onSchedule(
         }
 
         notificationTitle = task.title || task.name || data.title || "リマインダー";
+        const dueDateStr = task.dueDate || task.date;
+        deadlineText = formatDeadlineJa(dueDateStr, task.dueTime);
+        deadlineDate = computeDeadlineDate(dueDateStr, task.dueTime);
       }
 
       if (data.fcmToken) {
@@ -566,10 +596,18 @@ exports.sendReminderNotifications = onSchedule(
           // reminderId（このremindersドキュメント自身のID）も併せて含める。
           // quickCompleteTaskが「この通知からの完了操作は既に処理済みか」を判定するための
           // 手がかりとして使う（二重タップ・SWからの再送で同じ完了が2回走るのを防ぐため）。
+          const baseBody = data.body || "リマインダーの時間です";
           const messagePayload = {
             title: notificationTitle,
-            body: data.body || "リマインダーの時間です"
+            // 期限があるタスクは本文の先頭に「期限：〜」を差し込む。dueDate自体が無いタスク
+            // （頻度指定のみなど）はdeadlineTextがnullのままなので、元のbodyだけになる。
+            body: deadlineText ? `期限：${deadlineText}\n${baseBody}` : baseBody
           };
+          if (deadlineDate) {
+            // SW側でNotificationのtimestampに使う（対応ブラウザ/OSではタイトル横の時刻表示に反映される）。
+            // FCMのdataペイロードは文字列のみのため、Dateはミリ秒のepoch文字列にして渡す。
+            messagePayload.dueAt = String(deadlineDate.getTime());
+          }
           if (data.kind !== "daily" && data.taskId) {
             messagePayload.taskId = data.taskId;
             messagePayload.reminderId = doc.id;
