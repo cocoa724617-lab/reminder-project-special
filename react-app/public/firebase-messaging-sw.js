@@ -37,11 +37,19 @@ messaging.onBackgroundMessage((payload) => {
   // この通知の元になったremindersドキュメントのID。「完了」アクションの二重実行防止
   // （quickCompleteTaskのreminderIdガード）のために、クリック時までそのまま持ち回す。
   const reminderId = payload.data?.reminderId || null;
+  // タスクの期限（functions/index.jsのcomputeDeadlineDateが作るミリ秒epoch文字列）。
+  // 期限の文言自体はbodyに既に含まれているため、ここはtimestampへの反映のみに使う
+  // （対応ブラウザ/OSでは通知タイトル横の時刻表示がこの期限になる。非対応環境では単に無視される）。
+  const dueAt = payload.data?.dueAt ? Number(payload.data.dueAt) : null;
 
   const notificationOptions = {
     body: payload.data?.body || "通知があります",
     data: { taskId, reminderId },
   };
+
+  if (dueAt && Number.isFinite(dueAt)) {
+    notificationOptions.timestamp = dueAt;
+  }
 
   if (taskId && quickActionSdkAvailable) {
     notificationOptions.actions = [
