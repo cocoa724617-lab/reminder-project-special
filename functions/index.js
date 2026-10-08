@@ -585,6 +585,20 @@ exports.sendReminderNotifications = onSchedule(
         const dueDateStr = task.dueDate || task.date;
         deadlineText = formatDeadlineJa(dueDateStr, task.dueTime);
         deadlineDate = computeDeadlineDate(dueDateStr, task.dueTime);
+        // TODO(調査用・一時的): 期限が本文に出ない不具合の切り分け用。原因判明後に削除する。
+        console.log(
+          "DEBUG 期限確認:",
+          JSON.stringify({
+            reminderId: doc.id,
+            kind: data.kind,
+            taskId: data.taskId,
+            dueDate: task.dueDate,
+            date: task.date,
+            dueTime: task.dueTime,
+            dueDateStr,
+            deadlineText
+          })
+        );
       }
 
       if (data.fcmToken) {
