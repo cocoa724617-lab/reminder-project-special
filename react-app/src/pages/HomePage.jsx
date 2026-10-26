@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTasks, useRecentCompletedTasks, useLabelNames, useDiscoveredStatuses, useStreak } from "../hooks/useTasks.js";
 import { useNow } from "../hooks/useNow.js";
+import { formatDateTimeJa } from "../utils/dateUtils.js";
 import { computeCompletionStats } from "../utils/statsUtils.js";
 import {
   computeUserStatusStats,
@@ -9,7 +10,7 @@ import {
   computeWeeklyProgress,
   getStatusDiscoveryStats,
 } from "../utils/userStatusUtils.js";
-import { normalizeImportance, getRepeatCycleStatus } from "../utils/taskLabels.js";
+import { normalizeImportance, splitTasksByRepeatCycle } from "../utils/taskLabels.js";
 import { celebrateCompletion, celebrateStatusDiscovery } from "../utils/celebrate.js";
 import MetaPillRow from "../components/MetaPillRow.jsx";
 
@@ -184,7 +185,10 @@ function HomePage() {
 
   // 繰り返しタスクは今回分を完了済み（次のdueDateが来ていない）なら、ホーム画面には出さない。
   // 統計（下のcomputeXxxStats系）はこのフィルタの影響を受けない：tasksをそのまま渡す。
-  const visibleTasks = tasks.filter((task) => !getRepeatCycleStatus(task, now));
+  // TaskListPageと同じsplitTasksByRepeatCycleを使うことで、「待機中かどうか」の判定自体が
+  // 画面ごとにズレることはなくなる。waitingはTaskListPageの「完了済み」セクションと同じ
+  // 「次回：〜」表示で、下の「次回まで完了済み」セクションに出す。
+  const { pending: visibleTasks, waiting: waitingCycleTasks } = splitTasksByRepeatCycle(tasks, now);
   const activeTasks = visibleTasks.filter(isActiveTask);
   const nextTask = pickNextTask(activeTasks);
   const todaysActive = activeTasks.filter(isTodayTask).filter((task) => !nextTask || task.id !== nextTask.id);
@@ -293,6 +297,30 @@ function HomePage() {
           )}
         </div>
       </section>
+
+      {waitingCycleTasks.length > 0 && (
+        <section className="home-section">
+          <h2 className="home-section-title">次回まで完了済み</h2>
+          <div id="waiting-task-list">
+            {waitingCycleTasks.map(({ task, cycleStatus }) => (
+              <div className="task-card task-card-compact" key={task.id}>
+                <button
+                  type="button"
+                  className="task-complete-circle"
+                  aria-label="次回まで完了済み"
+                  title={`次回（${formatDateTimeJa(cycleStatus.nextDueDate)}）まで完了済みです`}
+                  disabled
+                />
+                <div className="task-info">
+                  <h3>{getTaskTitle(task, "無題のタスク")}</h3>
+                  <p className="task-remind">次回：{formatDateTimeJa(cycleStatus.nextDueDate)}</p>
+                  <MetaPillRow task={task} labelNames={labelNames} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="home-section" id="user-status-section">
         <h2 className="home-section-title">今週の進み具合</h2>

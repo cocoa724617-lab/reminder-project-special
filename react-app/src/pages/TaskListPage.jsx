@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useTasks, useLabelNames, useRecentCompletedTasks } from "../hooks/useTasks.js";
 import { useNow } from "../hooks/useNow.js";
 import { celebrateCompletion } from "../utils/celebrate.js";
-import { getRepeatCycleStatus } from "../utils/taskLabels.js";
+import { splitTasksByRepeatCycle } from "../utils/taskLabels.js";
 import TaskCard from "../components/TaskCard.jsx";
 import EmptyState from "../components/EmptyState.jsx";
 
@@ -94,12 +94,9 @@ function TaskListPage() {
   }
 
   // 未完了：繰り返しタスクで「今回分」を完了済み（次のdueDateがまだ来ていない）のものは除く。
-  const pendingTasks = sortTasks(tasks.filter((task) => !getRepeatCycleStatus(task, now)));
-
   // 完了済み①：繰り返しタスクで今回分を完了済みのもの（tasksコレクションに残ったまま、次回情報を表示）。
-  const cycleCompletedTasks = tasks
-    .map((task) => ({ task, cycleStatus: getRepeatCycleStatus(task, now) }))
-    .filter((entry) => entry.cycleStatus);
+  const { pending: pendingTasksRaw, waiting: cycleCompletedTasks } = splitTasksByRepeatCycle(tasks, now);
+  const pendingTasks = sortTasks(pendingTasksRaw);
 
   // 完了済み②：通常タスクの完了履歴（繰り返しタスクの分は①と二重表示になるため除く。
   // removedFromHistoryは一覧から消したいだけの論理削除フラグなのでここでも除く。

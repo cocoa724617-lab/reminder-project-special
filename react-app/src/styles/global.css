@@ -986,7 +986,7 @@ button:disabled {
 /* ===== フローティング「タスクを追加」ボタン ===== */
 .fab-button {
   position: fixed;
-  left: 20px;
+  right: 20px;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
   display: inline-flex;
   align-items: center;

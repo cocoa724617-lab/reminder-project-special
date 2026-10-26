@@ -73,6 +73,27 @@ export function getRepeatCycleStatus(task, now = new Date()) {
   return { completedAt: toDate(task.lastCompletedAt), nextDueDate };
 }
 
+// タスク一覧を「今すぐやるべきもの(pending)」と「繰り返しタスクで今回分は完了済み・次回待ちのもの
+// (waiting、cycleStatus付き)」に分ける共通ヘルパー。
+// HomePage/TaskListPageがそれぞれ別々にgetRepeatCycleStatusを呼んでいたのをここに集約する。
+// 各ページは「waitingをどう見せるか(非表示にする／「次回：〜」ピルで見せる)」だけを決めればよく、
+// 判定ロジック自体を書き直す必要がなくなる。
+export function splitTasksByRepeatCycle(tasks, now = new Date()) {
+  const pending = [];
+  const waiting = [];
+
+  tasks.forEach((task) => {
+    const cycleStatus = getRepeatCycleStatus(task, now);
+    if (cycleStatus) {
+      waiting.push({ task, cycleStatus });
+    } else {
+      pending.push(task);
+    }
+  });
+
+  return { pending, waiting };
+}
+
 // 既存 notification-settings.html の CUSTOMIZABLE_LABEL_KEYS と同じ：noneはカスタマイズ対象外。
 export const CUSTOMIZABLE_LABEL_KEYS = Object.keys(TASK_LABELS).filter((key) => key !== "none");
 
