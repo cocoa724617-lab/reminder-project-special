@@ -67,3 +67,6 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Artifact公開用の一時ファイル（Claude Codeのスクラッチパッド、プロジェクト本体ではない）
+scratchpad_*.html

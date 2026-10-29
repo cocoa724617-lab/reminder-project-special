@@ -20,36 +20,11 @@ const MIN_GAP_MINUTES = 60;
 // 「うっかり防止リマインダー」：1日1回、この中からランダムに1つ選んで送る。
 // 特定のタスクに紐付かないため、reminders コレクションでは kind: "daily" として扱う。
 const DAILY_REMINDER_MESSAGES = [
-  "LINEの返信はした？",
-  "上司への返信、もう送った？",
-  "あの予定、忘れてない？",
-  "メールの返信、後回しにしてない？",
-  "今日が締め切りの課題、大丈夫？",
-  "明日の持ち物、準備した？",
-  "提出するファイル、間違ってない？",
-  "予約の時間、確認した？",
-  "友達との約束、何時からだっけ？",
-  "今日中に連絡するって言ってなかった？",
-  "買い忘れているものはない？",
-  "洗濯物、干したままじゃない？",
-  "ゴミを出すの、忘れてない？",
-  "スマホの充電、大丈夫？",
-  "財布と鍵、ちゃんと持った？",
-  "薬を飲む時間じゃない？",
-  "水分、ちゃんと取ってる？",
-  "そろそろ休憩したほうがよくない？",
-  "今日の予定、もう一度確認した？",
-  "会議の資料、準備できてる？",
-  "あの人へのお礼、伝えた？",
-  "折り返しの電話、まだしてなくない？",
-  "シフトの提出、今日までじゃない？",
-  "支払い期限、過ぎてない？",
-  "レポート、保存しただけで満足してない？",
-  "先生への連絡、送った？",
-  "返信しようと思って、そのまま忘れてない？",
-  "明日の予定、カレンダーに入れた？",
-  "やろうとしていたこと、何か忘れてない？",
-  "「後でやる」って言ってから、どれくらいたった？"
+ "今日もログインだけしようよ！",
+ "ちょっと顔見せるだけでもいいから、覗いてみない？",
+ "開くだけでも今日はえらい、えらい！",
+ "連続記録、ここで止めちゃうのもったいないよ？",
+ "今日のあなた、まだ記録されてないよ〜"
 ];
 
 function pickRandomDailyReminderMessage() {
@@ -294,6 +269,71 @@ function computeDeadlineDate(dueDateStr, dueTimeStr) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+// react-app/src/utils/taskLabels.js の TASK_LABELS と同じ既定名（色自体は通知本文では使わないため持たない）。
+// 変更する場合はクライアント側とずれないよう両方直すこと。
+const TASK_LABEL_DEFAULT_NAMES = {
+  none: "ラベルなし",
+  urgent: "緊急",
+  school: "学校",
+  life: "生活",
+  jobhunt: "就活",
+  "think-later": "後で考える"
+};
+
+// クライアント側 getTaskLabel と同じ仕様：ユーザーがカスタマイズした名前（users/{uid}.labelNames）が
+// あれば優先し、無ければ既定名。未知の色キーは"none"扱いにする。
+function resolveLabelName(color, labelNames) {
+  const key = color && TASK_LABEL_DEFAULT_NAMES[color] ? color : "none";
+  return (labelNames && labelNames[key]) || TASK_LABEL_DEFAULT_NAMES[key];
+}
+
+// react-app/src/components/PostponeTimeSelector.jsx の選択肢と、通知の「1時間後」クイックアクションの
+// 固定ラベルをまとめて受け取り、実際の再通知時刻(Date)を計算する。
+// 「今日の夜」「明日の朝」はgetJstDateParts経由でJSTの日付を取り、+09:00を明示して組み立てる
+// （computeDueDateTimeと同じやり方。サーバーの実行タイムゾーン(UTC)に依存しないようにするため）。
+function computePostponeRemindAt(laterTime, now) {
+  const addMs = (ms) => new Date(now.getTime() + ms);
+
+  if (laterTime === "10分後") return addMs(10 * 60 * 1000);
+  if (laterTime === "30分後") return addMs(30 * 60 * 1000);
+  if (laterTime === "1時間後" || laterTime === "通知から1時間後") return addMs(60 * 60 * 1000);
+
+  if (laterTime === "今日の夜") {
+    const { y, m, d } = getJstDateParts(now);
+    const target = new Date(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T20:00:00+09:00`);
+    // 既に20時を過ぎている場合は、その場で過去向けの通知を予約してしまわないよう24時間後に倒す。
+    return target.getTime() > now.getTime() ? target : addMs(24 * 60 * 60 * 1000);
+  }
+
+  if (laterTime === "明日の朝") {
+    const { y, m, d } = getJstDateParts(addMs(24 * 60 * 60 * 1000));
+    return new Date(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T09:00:00+09:00`);
+  }
+
+  // 未知のラベルが来た場合は安全側(1時間後)にフォールバックする。
+  return addMs(60 * 60 * 1000);
+}
+
+// 「あとでやる」で選んだ時間に、実際にもう一度通知するための予約を1件作る。
+// 既存のkind(fixed/batch/daily)とは別のkind:"postponed"として扱い、本文はsendReminderNotifications側で
+// 「締め切りが近づいています」ではなく、ハードルを下げる軽い文言にする。
+async function createPostponeReminder(uid, taskId, task, userData, laterTime, now) {
+  if (!userData || !userData.fcmToken) return;
+
+  const remindAt = computePostponeRemindAt(laterTime, now);
+  const title = task.title || task.name || "リマインダー";
+  await db.collection("reminders").add({
+    uid,
+    taskId,
+    kind: "postponed",
+    title,
+    remindAt: admin.firestore.Timestamp.fromDate(remindAt),
+    fcmToken: userData.fcmToken,
+    notified: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+}
+
 // 期限から各オフセット分だけ遡った通知時刻を計算する。計算結果が既に過去のものはスキップする
 // （期限まで3日しかないのに「1週間前」を選んだ場合など、保存直後に即時通知が飛ぶのを防ぐ）。
 // 除外時間帯(「通知を辞めてほしい時間」)にかぶる場合は、その除外時間帯が終わる時刻までずらす。
@@ -339,7 +379,8 @@ async function regenerateFixedReminders(uid, taskId, task, userData, now) {
         taskId,
         kind: "fixed",
         title,
-        body: "指定した日時のお知らせです",
+        // 本文は送信直前(sendReminderNotifications)でラベル名・期限から組み立てるため、
+        // ここでは持たない（古いbodyのまま送られてしまう事故を避けるため）。
         remindAt: admin.firestore.Timestamp.fromDate(remindAt),
         fcmToken: userData.fcmToken,
         notified: false,
@@ -403,7 +444,8 @@ async function regenerateTaskBatch(uid, taskId, task, userData, now) {
         kind: "batch",
         scheduleKey,
         title,
-        body: "リマインダーの時間です",
+        // 本文は送信直前(sendReminderNotifications)でラベル名・期限から組み立てるため、
+        // ここでは持たない（古いbodyのまま送られてしまう事故を避けるため）。
         remindAt: admin.firestore.Timestamp.fromDate(remindAt),
         fcmToken: userData.fcmToken,
         notified: false,
@@ -564,9 +606,9 @@ exports.sendReminderNotifications = onSchedule(
     const promises = snapshot.docs.map(async (doc) => {
       const data = doc.data();
       let notificationTitle = data.title || "リマインダー";
-      // 期限（dueDate/dueTime）はタスクに紐付く通知(kind !== "daily")だけが対象。
-      // うっかり防止リマインダーはタスクを持たないため常にnullのまま。
-      let deadlineText = null;
+      // kind: "daily"（うっかり防止リマインダー、タスクに紐付かない）はdata.bodyをそのまま使う。
+      // それ以外は下のif内で、ラベル名・期限から組み立て直す。
+      let notificationBody = data.body || "うっかり防止リマインダー";
       let deadlineDate = null;
 
       // うっかり防止リマインダー(kind: "daily")はタスクに紐付かないため、タスクの存在・完了チェックは行わない。
@@ -583,22 +625,24 @@ exports.sendReminderNotifications = onSchedule(
 
         notificationTitle = task.title || task.name || data.title || "リマインダー";
         const dueDateStr = task.dueDate || task.date;
-        deadlineText = formatDeadlineJa(dueDateStr, task.dueTime);
+        const deadlineText = formatDeadlineJa(dueDateStr, task.dueTime);
         deadlineDate = computeDeadlineDate(dueDateStr, task.dueTime);
-        // TODO(調査用・一時的): 期限が本文に出ない不具合の切り分け用。原因判明後に削除する。
-        console.log(
-          "DEBUG 期限確認:",
-          JSON.stringify({
-            reminderId: doc.id,
-            kind: data.kind,
-            taskId: data.taskId,
-            dueDate: task.dueDate,
-            date: task.date,
-            dueTime: task.dueTime,
-            dueDateStr,
-            deadlineText
-          })
-        );
+
+        const userSnap = await db.collection("users").doc(data.uid).get();
+        const labelNames = (userSnap.exists && userSnap.data().labelNames) || {};
+        const labelName = resolveLabelName(task.color, labelNames);
+
+        if (data.kind === "postponed") {
+          // 「あとでやる」からの再通知：締め切り感を出さず、開くだけでOKという軽い文言にする
+          // （ハードルを下げる狙い。重さを出す「締め切りが近づいています」はここでは使わない）。
+          notificationBody = `${labelName}：${notificationTitle}\n開くだけでもOKだよ！`;
+        } else {
+          // 「締め切りが近づいています！／ラベル名：タイトル／期限」の3行構成。
+          // 期限を持たないタスク（頻度指定のみなど）は締め切り自体が無いため、ラベル名とタイトルだけにする。
+          notificationBody = deadlineText
+            ? `締め切りが近づいています！\n${labelName}：${notificationTitle}\n${deadlineText}`
+            : `${labelName}：${notificationTitle}`;
+        }
       }
 
       if (data.fcmToken) {
@@ -610,12 +654,9 @@ exports.sendReminderNotifications = onSchedule(
           // reminderId（このremindersドキュメント自身のID）も併せて含める。
           // quickCompleteTaskが「この通知からの完了操作は既に処理済みか」を判定するための
           // 手がかりとして使う（二重タップ・SWからの再送で同じ完了が2回走るのを防ぐため）。
-          const baseBody = data.body || "リマインダーの時間です";
           const messagePayload = {
             title: notificationTitle,
-            // 期限があるタスクは本文の先頭に「期限：〜」を差し込む。dueDate自体が無いタスク
-            // （頻度指定のみなど）はdeadlineTextがnullのままなので、元のbodyだけになる。
-            body: deadlineText ? `期限：${deadlineText}\n${baseBody}` : baseBody
+            body: notificationBody
           };
           if (deadlineDate) {
             // SW側でNotificationのtimestampに使う（対応ブラウザ/OSではタイトル横の時刻表示に反映される）。
@@ -808,6 +849,8 @@ exports.quickCompleteTask = onCall(async (request) => {
 
 // 通知の「1時間後」ボタン用：taskService.js の delayTaskWithLaterTime と同じ処理
 // （通知からのクイック操作なので、時間帯の選択肢は出さず固定で1時間後扱いにする）。
+// ステータス更新だけでは実際に1時間後の通知は飛ばないため、createPostponeReminderで
+// 再通知の予約も合わせて作る（これが無かったのが元々の不具合）。
 exports.quickPostponeTask = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です");
 
@@ -820,13 +863,56 @@ exports.quickPostponeTask = onCall(async (request) => {
   if (!taskSnap.exists) {
     return { ok: false, reason: "already-gone" };
   }
+  const task = taskSnap.data();
+  const laterTime = "通知から1時間後";
+  const now = new Date();
 
   await taskRef.update({
     status: "後でやる",
-    laterTime: "通知から1時間後",
+    laterTime,
     laterCount: admin.firestore.FieldValue.increment(1),
     lastPostponedAt: admin.firestore.FieldValue.serverTimestamp()
   });
+
+  const userSnap = await db.collection("users").doc(uid).get();
+  await createPostponeReminder(uid, taskId, task, userSnap.exists ? userSnap.data() : null, laterTime, now);
+
+  return { ok: true };
+});
+
+// アプリ内の「あとでやる」画面(PostponeTimeSelector)用。既存のdelayTaskWithLaterTimeは
+// タスクのステータス更新だけで実際の再通知を作っていなかったため、quickPostponeTaskと同じ形に揃え、
+// Cloud Functions側でステータス更新と再通知の予約(createPostponeReminder)をまとめて行う。
+const POSTPONE_TIME_LABELS = ["10分後", "30分後", "1時間後", "今日の夜", "明日の朝"];
+
+exports.postponeTask = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です");
+
+  const uid = request.auth.uid;
+  const taskId = request.data && request.data.taskId;
+  const laterTime = request.data && request.data.laterTime;
+  if (!taskId) throw new HttpsError("invalid-argument", "taskIdが必要です");
+  if (!POSTPONE_TIME_LABELS.includes(laterTime)) {
+    throw new HttpsError("invalid-argument", "laterTimeの値が不正です");
+  }
+
+  const taskRef = db.collection("users").doc(uid).collection("tasks").doc(taskId);
+  const taskSnap = await taskRef.get();
+  if (!taskSnap.exists) {
+    return { ok: false, reason: "already-gone" };
+  }
+  const task = taskSnap.data();
+  const now = new Date();
+
+  await taskRef.update({
+    status: "後でやる",
+    laterTime,
+    laterCount: admin.firestore.FieldValue.increment(1),
+    lastPostponedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  const userSnap = await db.collection("users").doc(uid).get();
+  await createPostponeReminder(uid, taskId, task, userSnap.exists ? userSnap.data() : null, laterTime, now);
 
   return { ok: true };
 });
