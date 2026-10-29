@@ -21,17 +21,13 @@
 - 完了履歴・直近の達成率などの実績確認
 - 取り組み状況に応じて変化するステータスアイコン（全8種類）とその発見度
 
-直近の完了率・後回し率・登録ペースから、以下のように毎回複数種類を判定している（一例）。
+直近の「完了率」「後回し率」「タスクの登録ペース」から、毎回複数のステータスを判定している（実装: `react-app/src/utils/userStatusUtils.js` の `getUserStatusesFromStats`）。例えば下の3つはこういう基準で判定される。
 
-```js
-// react-app/src/utils/userStatusUtils.js
-if (averageRegisteredTasksPerDay >= 4 && completionRate >= 0.9 && postponeRate < 0.1) {
-  statuses.push(copyStatus("selfManagementMaster")); // セルフマネジメントマスター
-}
-if (postponeRate >= 0.5 && (totalTasks >= 3 || totalLaterCount >= 3)) {
-  statuses.push(copyStatus("procrastinationDemon"));  // 先延ばし大魔神
-}
-```
+| ステータス | 判定のイメージ |
+|---|---|
+| セルフマネジメントマスター | タスクをよく登録し、9割以上完了。後回しもほぼ無い |
+| 先延ばし大魔神 | タスクの半分以上を後回しにしている |
+| うっかり星人 | 完了率が3〜6割程度で、忘れがちな状態 |
 
 | セルフマネジメントマスター | 先延ばし大魔神 | うっかり星人 |
 |---|---|---|
