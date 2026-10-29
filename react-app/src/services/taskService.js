@@ -13,8 +13,10 @@ import {
   Timestamp,
   runTransaction,
 } from "firebase/firestore";
-import { db } from "./firebase.js";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "./firebase.js";
 import { toDateKey } from "../utils/dateUtils.js";
+import { isRepeatingTask } from "../utils/taskLabels.js";
 
 function tasksCollection(uid) {
   return collection(db, "users", uid, "tasks");
@@ -79,10 +81,6 @@ async function cancelPendingReminders(uid, taskId) {
   );
   const snapshot = await getDocs(remindersQuery);
   await Promise.all(snapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)));
-}
-
-function isRepeatingTask(task) {
-  return !!task.repeat && task.repeat !== "none";
 }
 
 // 既存 tasks-data.js の computeNextDueDate と同じ仕様：繰り返しタスクの次回期限を計算する。
@@ -194,17 +192,13 @@ export async function setTaskStatus(uid, taskId, status) {
   await updateDoc(doc(db, "users", uid, "tasks", taskId), { status });
 }
 
-// 既存 tasks-data.js の delayTaskWithLaterTime と同じ仕様：
-// 「あとでやる」時に選んだ時間帯を保存する。dueDateやupdatedAtは元実装でも更新していないため、ここでも触らない。
-// laterTimeは実際のリマインダー再スケジュールには使われず（Cloud Functions側は見ていない）、
-// 表示・統計用のメタデータとして保存されるだけ。
-export async function delayTaskWithLaterTime(uid, taskId, laterTime) {
-  await updateDoc(doc(db, "users", uid, "tasks", taskId), {
-    status: "後でやる",
-    laterTime,
-    laterCount: increment(1),
-    lastPostponedAt: serverTimestamp(),
-  });
+// 「あとでやる」時に選んだ時間帯を保存する。
+// 以前はクライアントから直接Firestoreを更新するだけで、選んだ時間に実際の再通知を作っていなかった
+// （laterTimeは表示・統計用のメタデータとして保存されるだけで、Cloud Functions側は見ていなかった）。
+// Cloud Functions の postponeTask 経由にすることで、ステータス更新と合わせて実際の再通知予約も作る。
+export async function delayTaskWithLaterTime(taskId, laterTime) {
+  const postponeTask = httpsCallable(functions, "postponeTask");
+  await postponeTask({ taskId, laterTime });
 }
 
 // 既存 tasks-data.js の deleteTask と同じ仕様：タスク本体を削除し、保留中のリマインダーもキャンセルする。

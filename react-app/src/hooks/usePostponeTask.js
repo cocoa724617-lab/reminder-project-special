@@ -21,7 +21,7 @@ export function usePostponeTask(taskId) {
     setIsSaving(true);
     setSaveError(null);
     try {
-      await delayTaskWithLaterTime(currentUser.uid, taskId, laterTime);
+      await delayTaskWithLaterTime(taskId, laterTime);
     } catch (err) {
       console.error("タスクの後回しに失敗しました:", err);
       setSaveError(err);
