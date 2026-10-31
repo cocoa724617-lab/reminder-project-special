@@ -214,9 +214,27 @@ function pickSpreadTimes(candidates, n) {
   return picks;
 }
 
-function isChainableTask(task) {
+// 一回きり(繰り返し設定が無い)タスクが期限切れかどうかを判定する。
+// 繰り返しタスクは完了のたびdueDateが次回に進むだけなので対象外にしない
+// （「期限切れ」はそもそも「今回分がまだ未完了」という意味しかないため、呼び出し側でisRepeating判定とセットで使う）。
+// computeDeadlineDateはこの下で定義されているが、function宣言のためホイスティングにより参照可能。
+function isTaskOverdue(task, now) {
+  const dueDateStr = task?.dueDate || task?.date;
+  const due = computeDeadlineDate(dueDateStr, task?.dueTime);
+  return !!due && now.getTime() > due.getTime();
+}
+
+// nowは省略可能だが、呼び出し元(onTaskWritten/regenerateReminderSchedules/regenerateTaskBatch)は
+// いずれも処理開始時刻のnowを明示的に渡す（毎回new Date()し直すと僅かなズレが生まれるため）。
+function isChainableTask(task, now = new Date()) {
   const hasCountFrequency = normalizeFrequencyCount(task?.frequencyCount || task?.randomFrequencyCount);
   const hasLegacyFrequency = !!task?.frequency && task.frequency !== "none";
+  const isRepeating = !!task?.repeat && task.repeat !== "none";
+
+  // 一回きりのタスクが期限切れなら、以後は通知対象から外す
+  // （頻度指定のバラ撒き通知が期限切れ後も延々届き続ける不具合の対策）。
+  if (!isRepeating && isTaskOverdue(task, now)) return false;
+
   return !!task && task.status !== "完了" && (hasCountFrequency || hasLegacyFrequency) && task.enabled !== false;
 }
 
@@ -414,7 +432,7 @@ function computeBatchSchedule(task, settings, referenceDate, afterDate) {
 // 対象タスクの未通知バッチ予約をすべて作り直す(タスク編集時、および毎日/毎週の再生成時に呼ぶ)
 async function regenerateTaskBatch(uid, taskId, task, userData, now) {
   if (!userData || !userData.fcmToken) return;
-  if (!isChainableTask(task)) return;
+  if (!isChainableTask(task, now)) return;
 
   const settings = userData.notificationSettings || {};
   if (settings.enabled === false) return;
@@ -518,10 +536,11 @@ exports.onTaskWritten = onDocumentWritten("users/{uid}/tasks/{taskId}", async (e
   const userSnap = await db.collection("users").doc(uid).get();
   const userData = userSnap.exists ? userSnap.data() : null;
 
-  if (isChainableTask(after)) {
+  if (isChainableTask(after, now)) {
     await regenerateTaskBatch(uid, taskId, after, userData, now);
   } else {
-    // タスクが削除・完了・無効化・単発通知(頻度なし)になった場合は、未通知のバッチ予約を止める
+    // タスクが削除・完了・無効化・単発通知(頻度なし)・期限切れ(繰り返し無し)になった場合は、
+    // 未通知のバッチ予約を止める
     const staleBatch = await db
       .collection("reminders")
       .where("uid", "==", uid)
@@ -563,7 +582,7 @@ exports.regenerateReminderSchedules = onSchedule(
 
     const taskPromises = tasksSnap.docs.map(async (taskDoc) => {
       const task = taskDoc.data();
-      if (!isChainableTask(task)) return;
+      if (!isChainableTask(task, now)) return;
 
       const frequencySpec = getFrequencySpec(task);
       if (frequencySpec.unit === "week" && !isMonday) return;
@@ -593,6 +612,8 @@ exports.sendReminderNotifications = onSchedule(
   },
   async () => {
     const now = admin.firestore.Timestamp.now();
+    // isChainableTask/isTaskOverdueはJSのDateを受け取るため、Firestore Timestampから変換しておく。
+    const nowDate = now.toDate();
 
     const snapshot = await db
       .collection("reminders")
@@ -621,6 +642,24 @@ exports.sendReminderNotifications = onSchedule(
           console.log("タスクが完了済み/削除済み。通知をキャンセルして削除。", doc.id);
           await doc.ref.delete();
           return;
+        }
+
+        // ①一回きり(繰り返し無し)のタスクが期限切れの場合、このバッチ通知を最後にして
+        // 「それっきり」にする：今回は普通に送るが、同タスクの残り(未来時刻の分)は削除する。
+        // isChainableTask側(②)は「今後新しく作らせない」対応であり、既に今日作られてしまった
+        // 残りの予約を片付けるのはここ(①)の役目になる（②だけでは当日分を防げないため）。
+        const isRepeating = !!task.repeat && task.repeat !== "none";
+        if (data.kind === "batch" && !isRepeating && isTaskOverdue(task, nowDate)) {
+          const siblings = await db
+            .collection("reminders")
+            .where("uid", "==", data.uid)
+            .where("taskId", "==", data.taskId)
+            .where("kind", "==", "batch")
+            .where("notified", "==", false)
+            .get();
+          await Promise.all(
+            siblings.docs.filter((d) => d.id !== doc.id).map((d) => d.ref.delete())
+          );
         }
 
         notificationTitle = task.title || task.name || data.title || "リマインダー";

@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-11-01
+
+### 期限切れタスクの通知を止める(B案)を実装
+
+- 一回きり(繰り返し無し)のタスクが期限切れになっても、バッチ通知(頻度指定のランダム通知)が延々届き続けていた不具合を解消
+- 修正は2箇所セットで実装(片方だけでは当日分を防げないため)
+  - `isChainableTask`に`isTaskOverdue`判定を追加。期限切れ+繰り返し無しのタスクを通知対象外にし、`onTaskWritten`・`regenerateReminderSchedules`の両方で「今後新しく予約を作らせない」を実現
+  - `sendReminderNotifications`に、期限切れ後の送信時に残っている同タスクの未通知batch予約を削除する処理を追加(「それっきりにする」)
+- 繰り返し設定があるタスクは対象外（完了すると次回のdueDateに進むだけなので、期限切れの概念がそもそも当てはまらない）
+- A案(タスクカードの見た目で期限切れを示す)はまだ未着手。BACKLOG.mdに次の項目として残した
+- Cloud Functions 3つ(`onTaskWritten`/`regenerateReminderSchedules`/`sendReminderNotifications`)をデプロイ済み
+
+### 変更ファイル
+- `functions/index.js`
+
+---
+
 ## 2026-10-27(2)
 
 ### isRepeatingTaskの重複を解消
