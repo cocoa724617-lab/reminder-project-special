@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../contexts/useAuth.js";
 import {
   fetchRecentCompletedTasks,
+  fetchRecentMissedTasks,
   fetchTasks,
   fetchTask,
   fetchCompletedTasks,
@@ -63,6 +64,48 @@ export function useRecentCompletedTasks(days = 14) {
   }
 
   return { completedTasks, isLoading, error, removeCompletedTask };
+}
+
+// ログイン中ユーザーの直近 days 日分の「やらなかった回」（繰り返しタスクの自動繰り越し記録）を取得するフック。
+// 達成率のノルマに数えるためだけに使う補助データなので、取得に失敗しても画面全体は落とさず空配列のまま進める
+// （その場合は繰り越し機能が入る前と同じく、やらなかった回がノルマに入らないだけ）。
+export function useRecentMissedTasks(days = 14) {
+  const { currentUser } = useAuth();
+  const [missedTasks, setMissedTasks] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function load() {
+      if (!currentUser) {
+        if (!isCancelled) {
+          setMissedTasks([]);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        const result = await fetchRecentMissedTasks(currentUser.uid, days);
+        if (!isCancelled) setMissedTasks(result);
+      } catch (err) {
+        console.error("繰り越し記録の取得に失敗しました:", err);
+      } finally {
+        if (!isCancelled) setIsLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser, days]);
+
+  return { missedTasks, isLoading };
 }
 
 // ログイン中ユーザーの未完了タスク一覧を取得するフック。

@@ -217,10 +217,11 @@ function pickSpreadTimes(candidates, n) {
 // 一回きり(繰り返し設定が無い)タスクが期限切れかどうかを判定する。
 // 繰り返しタスクは完了のたびdueDateが次回に進むだけなので対象外にしない
 // （「期限切れ」はそもそも「今回分がまだ未完了」という意味しかないため、呼び出し側でisRepeating判定とセットで使う）。
-// computeDeadlineDateはこの下で定義されているが、function宣言のためホイスティングにより参照可能。
+// 締切はcomputeCycleDeadlineと同じ考え方（日付だけならその日の終わり）。computeDeadlineDate(0:00)を
+// そのまま使うと、日付だけのタスクが期限当日の0:00に期限切れ扱いになり、当日の通知が止まってしまっていた。
+// computeCycleDeadlineはこの下で定義されているが、function宣言のためホイスティングにより参照可能。
 function isTaskOverdue(task, now) {
-  const dueDateStr = task?.dueDate || task?.date;
-  const due = computeDeadlineDate(dueDateStr, task?.dueTime);
+  const due = computeCycleDeadline({ dueDate: task?.dueDate || task?.date, dueTime: task?.dueTime });
   return !!due && now.getTime() > due.getTime();
 }
 
@@ -285,6 +286,16 @@ function computeDeadlineDate(dueDateStr, dueTimeStr) {
   const timePart = /^\d{1,2}:\d{1,2}$/.test(String(dueTimeStr || "")) ? dueTimeStr : "00:00";
   const date = new Date(`${dueDateStr}T${timePart}:00+09:00`);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// 繰り返しタスクの「今回分の締切」。期限時刻があればその時刻、日付だけならその日の終わり(翌日0:00)とする
+// （computeDeadlineDateは日付だけだと0:00を返すため、そのまま使うと期限当日の朝に次回へ進んでしまう）。
+// クライアント側 taskLabels.js の getCycleDeadline と同じ仕様。変更する場合は両方揃えること。
+function computeCycleDeadline(task) {
+  const deadline = computeDeadlineDate(task?.dueDate, task?.dueTime);
+  if (!deadline) return null;
+  const hasTime = /^\d{1,2}:\d{1,2}$/.test(String(task?.dueTime || ""));
+  return hasTime ? deadline : new Date(deadline.getTime() + 24 * 60 * 60 * 1000);
 }
 
 // react-app/src/utils/taskLabels.js の TASK_LABELS と同じ既定名（色自体は通知本文では使わないため持たない）。
@@ -721,6 +732,99 @@ exports.sendReminderNotifications = onSchedule(
 
       // バッチ予約は日/週ぶんまとめて事前に作成済みなので、送信後はこの1件を消すだけでよい
       await doc.ref.delete();
+    });
+
+    await Promise.all(promises);
+  }
+);
+
+// ===== 繰り返しタスクの自動繰り越し =====
+// 繰り返しタスクを今回分の締切までに完了できなかった場合、締切を過ぎた時点で次回の期限へ進める
+// （これまでは完了するまでdueDateが過去のまま残り、次の周回に進めなかった）。
+// やらなかった回は users/{uid}/missedTasks に記録し、クライアント側の達成率計算(userStatusUtils.js)で
+// 「ノルマには入るが完了ではない回」として数える（黙って進めるだけだと、サボった回が達成率から消えてしまうため）。
+
+const REPEAT_VALUES = ["daily", "weekly", "monthly", "yearly"];
+
+// missedTasksは達成率の集計(最大30日)にしか使わないため、それより古い回は記録しない
+// （長期間放置されたdailyタスクで、1回の繰り越しに数百件の書き込みが発生するのを防ぐ）。
+const MISSED_RECORD_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
+
+exports.advanceOverdueRepeatingTasks = onSchedule(
+  {
+    schedule: "every 5 minutes",
+    timeZone: "Asia/Tokyo"
+  },
+  async () => {
+    const now = new Date();
+    // repeatの単一フィールドインデックス(コレクショングループ範囲)が必要：firestore.indexes.jsonのfieldOverrides参照。
+    const tasksSnap = await db.collectionGroup("tasks").where("repeat", "in", REPEAT_VALUES).get();
+
+    const promises = tasksSnap.docs.map(async (taskDoc) => {
+      const firstDeadline = computeCycleDeadline(taskDoc.data());
+      if (!firstDeadline || now.getTime() <= firstDeadline.getTime()) return;
+
+      const uid = taskDoc.ref.parent.parent.id;
+      const taskId = taskDoc.id;
+
+      // 締切ちょうどにユーザーが完了操作をした場合と競合しないよう、読み直し→判定→書き込みをトランザクションにする
+      // （完了でdueDateが先に進んでいれば、読み直した時点で締切前になっているので何もしない）。
+      const advanced = await db.runTransaction(async (transaction) => {
+        const snap = await transaction.get(taskDoc.ref);
+        if (!snap.exists) return false;
+        const task = snap.data();
+        if (!REPEAT_VALUES.includes(task.repeat)) return false;
+
+        let dueDate = task.dueDate;
+        let deadline = computeCycleDeadline(task);
+        const missedDueDates = [];
+        // 何周も放置されていた場合は、締切が未来になる回までまとめて進める。
+        while (deadline && now.getTime() > deadline.getTime()) {
+          if (now.getTime() - deadline.getTime() <= MISSED_RECORD_WINDOW_MS) missedDueDates.push(dueDate);
+          dueDate = computeNextDueDate(dueDate, task.repeat);
+          deadline = computeCycleDeadline({ ...task, dueDate });
+        }
+        if (dueDate === task.dueDate) return false;
+
+        missedDueDates.forEach((missedDueDate) => {
+          // IDを「タスクID_その回の期限」で固定し、関数がリトライされても同じ回を二重に記録しないようにする。
+          transaction.set(db.collection("users").doc(uid).collection("missedTasks").doc(`${taskId}_${missedDueDate}`), {
+            originalTaskId: taskId,
+            name: task.name || task.title || null,
+            color: task.color || null,
+            repeat: task.repeat,
+            dueDate: missedDueDate,
+            dueTime: task.dueTime || null,
+            laterCount: Number(task.laterCount) || 0,
+            missedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        });
+
+        // 完了時(quickCompleteTask)と同じく、後回しの状態は新しい周回に持ち越さない。
+        // lastCompletedAtは「最後に完了した日時」の記録なので触らない。
+        transaction.update(taskDoc.ref, {
+          status: "未完了",
+          dueDate,
+          laterCount: 0,
+          lastPostponedAt: null,
+          laterTime: null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return true;
+      });
+
+      if (!advanced) return;
+
+      // batch/fixedの予約は、このdueDate更新で発火するonTaskWrittenが新しい期限で作り直す。
+      // 前の周回で「あとでやる」した再通知(kind: "postponed")だけはonTaskWrittenが扱わないため、ここで消す。
+      const stalePostponed = await db
+        .collection("reminders")
+        .where("uid", "==", uid)
+        .where("taskId", "==", taskId)
+        .where("kind", "==", "postponed")
+        .where("notified", "==", false)
+        .get();
+      await Promise.all(stalePostponed.docs.map((d) => d.ref.delete()));
     });
 
     await Promise.all(promises);

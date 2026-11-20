@@ -140,7 +140,7 @@ function TaskCard({
       aria-label={isArchived ? "完了済み" : cycleStatus ? "次回まで完了済み" : "タスクを完了にする"}
       aria-pressed={isArchived}
       disabled={isDone || isCompleting}
-      title={cycleStatus ? `次回（${formatDateTimeJa(cycleStatus.nextDueDate)}）まで完了済みです` : undefined}
+      title={cycleStatus ? `今回分は完了済みです（次回の期限：${formatDateTimeJa(cycleStatus.nextDueDate)}）` : undefined}
       onClick={handleCompleteClick}
     >
       {isArchived && <span aria-hidden="true">✓</span>}

@@ -1,4 +1,4 @@
-import { useTasks, useRecentCompletedTasks } from "../hooks/useTasks.js";
+import { useTasks, useRecentCompletedTasks, useRecentMissedTasks } from "../hooks/useTasks.js";
 import { computeCompletionStats } from "../utils/statsUtils.js";
 import { computeMonthlyProgress } from "../utils/userStatusUtils.js";
 import { formatDate } from "../utils/dateUtils.js";
@@ -18,8 +18,10 @@ function StatsPage() {
     isLoading: completedLoading,
     error: completedError,
   } = useRecentCompletedTasks(MONTHLY_RANGE_DAYS);
+  // 繰り返しタスクで「やらなかった回」（自動繰り越しの記録）。達成率のノルマにだけ使う。
+  const { missedTasks, isLoading: missedLoading } = useRecentMissedTasks(MONTHLY_RANGE_DAYS);
 
-  if (tasksLoading || completedLoading) {
+  if (tasksLoading || completedLoading || missedLoading) {
     return (
       <section className="page-placeholder">
         <p>読み込み中</p>
@@ -42,7 +44,7 @@ function StatsPage() {
   // 直近30日（約1か月）分の達成率・完了数・完了タスク名一覧。
   // 達成率・完了数はremovedFromHistory（完了済み一覧からの削除）の影響を受けないが、
   // 名前一覧はここで除外し、一覧から消す操作をこの画面でも反映する。
-  const monthlyStats = computeMonthlyProgress(tasks, completedTasks, new Date(), MONTHLY_RANGE_DAYS);
+  const monthlyStats = computeMonthlyProgress(tasks, completedTasks, new Date(), MONTHLY_RANGE_DAYS, missedTasks);
   const visibleMonthlyCompletedTasks = monthlyStats.completedTasks.filter((task) => !task.removedFromHistory);
   const monthlyCompletionRateText =
     monthlyStats.completionTargetCount > 0 ? formatPercentText(monthlyStats.completionRate) : "集計対象なし";

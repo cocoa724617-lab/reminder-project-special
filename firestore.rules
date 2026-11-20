@@ -88,7 +88,15 @@ service cloud.firestore {
         && isValidCompletedTaskWrite(request.resource.data);
     }
 
-    // 上記2つ以外の users/{uid} 配下サブコレクションは現状存在しないため、意図的にここで拒否させている
+    // users/{uid}/missedTasks/{missedTaskId} … 繰り返しタスクで、締切までに完了できず自動で次回へ
+    // 繰り越された回の記録（達成率の集計用）。Cloud Functions(advanceOverdueRepeatingTasks)だけが書き込み、
+    // クライアントは読むだけ。
+    match /users/{uid}/missedTasks/{missedTaskId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // 上記3つ以外の users/{uid} 配下サブコレクションは現状存在しないため、意図的にここで拒否させている
     // （最後の catch-all に落ちる）。新しいサブコレクションを追加する場合は、専用の match を追加し、
     // その形式に合ったチェック関数も一緒に用意すること。汎用の {document=**} で受けてしまうと
     // 上のtasks/completedTasksのデータ形式チェックがまとめて無効化される（Firestoreのルールは

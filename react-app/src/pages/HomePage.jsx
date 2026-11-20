@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useTasks, useRecentCompletedTasks, useLabelNames, useDiscoveredStatuses, useStreak } from "../hooks/useTasks.js";
+import {
+  useTasks,
+  useRecentCompletedTasks,
+  useRecentMissedTasks,
+  useLabelNames, useDiscoveredStatuses, useStreak } from "../hooks/useTasks.js";
 import { useNow } from "../hooks/useNow.js";
 import { formatDateTimeJa } from "../utils/dateUtils.js";
 import { computeCompletionStats } from "../utils/statsUtils.js";
@@ -113,6 +117,8 @@ function getUserStatusMessage(stats) {
 function HomePage() {
   const { tasks, isLoading: tasksLoading, error: tasksError, completeTask } = useTasks();
   const { completedTasks: recentCompletedFromServer, isLoading: completedLoading } = useRecentCompletedTasks();
+  // 繰り返しタスクで「やらなかった回」（自動繰り越しの記録）。達成率のノルマにだけ使う。
+  const { missedTasks, isLoading: missedLoading } = useRecentMissedTasks();
   const labelNames = useLabelNames();
   // 繰り返しタスクの「次回期限が来たか」判定用。ページを開きっぱなしでも定期的に更新され、
   // 次回期限を過ぎた繰り返しタスクが自動で「今日やるべきタスク」に出てくるようにする。
@@ -137,11 +143,20 @@ function HomePage() {
   // discoveredStatusesLoaded を待たずに呼ぶと、Firestoreから過去の発見履歴を取得しきる前の空配列を
   // 「発見済み一覧」として上書き保存してしまい、既発見のステータスも毎回「新規発見」扱いになってしまう。
   useEffect(() => {
-    if (tasksLoading || completedLoading || !discoveredStatusesLoaded) return;
-    const stats = computeUserStatusStats(tasks, recentCompleted);
+    if (tasksLoading || completedLoading || missedLoading || !discoveredStatusesLoaded) return;
+    const stats = computeUserStatusStats(tasks, recentCompleted, new Date(), missedTasks);
     const statuses = getUserStatusesFromStats(stats);
     if (statuses.length > 0) recordDiscoveries(statuses);
-  }, [tasksLoading, completedLoading, discoveredStatusesLoaded, tasks, recentCompleted, recordDiscoveries]);
+  }, [
+    tasksLoading,
+    completedLoading,
+    missedLoading,
+    discoveredStatusesLoaded,
+    tasks,
+    recentCompleted,
+    missedTasks,
+    recordDiscoveries,
+  ]);
 
   // 新規発見があった瞬間だけトースト演出を出す。表示後は自身でキューを空にして、
   // 次に別のステータスを新規発見するまで再表示されないようにする。
@@ -151,7 +166,7 @@ function HomePage() {
     clearNewlyDiscovered();
   }, [newlyDiscovered, clearNewlyDiscovered]);
 
-  if (tasksLoading || completedLoading) {
+  if (tasksLoading || completedLoading || missedLoading) {
     return (
       <section className="page-placeholder">
         <p>読み込み中</p>
@@ -195,10 +210,10 @@ function HomePage() {
 
   const completionStats = computeCompletionStats(recentCompleted);
   // バッジ判定用：直近7日の移動窓（月曜になっても急にリセットされない）。
-  const userStatusStats = computeUserStatusStats(tasks, recentCompleted);
+  const userStatusStats = computeUserStatusStats(tasks, recentCompleted, new Date(), missedTasks);
   const currentStatuses = getUserStatusesFromStats(userStatusStats);
   // 「今週の進み具合」カード表示用：月曜0時起点の暦週で、実際に毎週リセットされる。
-  const weeklyProgress = computeWeeklyProgress(tasks, recentCompleted);
+  const weeklyProgress = computeWeeklyProgress(tasks, recentCompleted, new Date(), missedTasks);
   const completionRateText =
     weeklyProgress.completionTargetCount > 0 ? formatPercentText(weeklyProgress.completionRate) : "集計対象なし";
   const postponeRateText = formatPercentText(weeklyProgress.postponeRate, "0%");
@@ -308,7 +323,7 @@ function HomePage() {
                   type="button"
                   className="task-complete-circle"
                   aria-label="次回まで完了済み"
-                  title={`次回（${formatDateTimeJa(cycleStatus.nextDueDate)}）まで完了済みです`}
+                  title={`今回分は完了済みです（次回の期限：${formatDateTimeJa(cycleStatus.nextDueDate)}）`}
                   disabled
                 />
                 <div className="task-info">

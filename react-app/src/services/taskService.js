@@ -71,6 +71,22 @@ export async function fetchRecentCompletedTasks(uid, days = 14) {
   return snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id }));
 }
 
+// 繰り返しタスクで締切までに完了できず、Cloud Functions(advanceOverdueRepeatingTasks)が次回へ
+// 自動繰り越しした回の記録。達成率の「ノルマ」として数えるためだけに使う（完了数には入らない）。
+// 集計はその回の期限(dueDate)で期間判定するため、取得もdueDate("YYYY-MM-DD"、文字列比較で日付順になる)で絞る。
+export async function fetchRecentMissedTasks(uid, days = 14) {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+
+  const recentQuery = query(
+    collection(db, "users", uid, "missedTasks"),
+    where("dueDate", ">=", toDateKey(cutoff)),
+  );
+  const snapshot = await getDocs(recentQuery);
+  return snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id }));
+}
+
 // 既存 tasks-data.js の cancelPendingReminders と同じ仕様：未通知のリマインダーを削除する。
 async function cancelPendingReminders(uid, taskId) {
   const remindersQuery = query(
